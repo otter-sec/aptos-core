@@ -252,8 +252,10 @@ impl Container {
     /// Recusively count how many references are borrowed to all the sub-fields in total. This does
     /// not include owned values themselves. e.g. value with no references will return 0
     fn subtree_live_references(&self, include_root: bool) -> usize {
+        // return 0;
         let subtrees_sum = match self {
-            Container::Locals(r) | Container::Vec(r) | Container::Struct(r) => r
+            // TODO: investigate impact on huge nested structs
+            Container::Locals(r) | Container::Struct(r) => r
                 .borrow()
                 .iter()
                 .map(|entry| {
@@ -264,6 +266,9 @@ impl Container {
                     }
                 })
                 .sum(),
+            // This check becomes too expensive if vector grows too big. Each time the vector gets
+            // moved to stack it will cause iteration over all elements which would be unacceptable
+            Container::Vec(_) => 0,
             _ => 0,
         };
         // We subtract one for the actual value owner
