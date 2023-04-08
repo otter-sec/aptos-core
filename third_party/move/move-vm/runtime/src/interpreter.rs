@@ -884,6 +884,8 @@ impl Stack {
     /// Push a `Value` on the stack if the max stack size has not been reached. Abort execution
     /// otherwise.
     fn push(&mut self, value: Value) -> PartialVMResult<()> {
+        // prevent all container values being moved to stack with live references!
+        value.check_refs_before_move()?;
         if self.value.len() < OPERAND_STACK_SIZE_LIMIT {
             self.value.push(value);
             Ok(())
