@@ -60,7 +60,7 @@ macro_rules! define_index {
         #[derive(Clone, Copy, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
         #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
         #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-        #[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+        #[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
         #[doc=$comment]
         pub struct $name(pub TableIndex);
 
@@ -217,7 +217,7 @@ pub const NO_TYPE_ARGUMENTS: SignatureIndex = SignatureIndex(0);
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct ModuleHandle {
     /// Index into the `AddressIdentifierIndex`. Identifies module-holding account's address.
     pub address: AddressIdentifierIndex,
@@ -241,7 +241,7 @@ pub struct ModuleHandle {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct StructHandle {
     /// The module that defines the type.
     pub module: ModuleHandleIndex,
@@ -265,7 +265,7 @@ impl StructHandle {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct StructTypeParameter {
     /// The type parameter constraints.
     pub constraints: AbilitySet,
@@ -283,7 +283,7 @@ pub struct StructTypeParameter {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(params = "usize"))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FunctionHandle {
     /// The module that defines the function.
     pub module: ModuleHandleIndex,
@@ -301,7 +301,7 @@ pub struct FunctionHandle {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FieldHandle {
     pub owner: StructDefinitionIndex,
     pub field: MemberCount,
@@ -314,7 +314,7 @@ pub struct FieldHandle {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub enum StructFieldInformation {
     Native,
     Declared(Vec<FieldDefinition>),
@@ -332,7 +332,7 @@ pub enum StructFieldInformation {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct StructDefInstantiation {
     pub def: StructDefinitionIndex,
     pub type_parameters: SignatureIndex,
@@ -342,7 +342,7 @@ pub struct StructDefInstantiation {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FunctionInstantiation {
     pub handle: FunctionHandleIndex,
     pub type_parameters: SignatureIndex,
@@ -357,7 +357,7 @@ pub struct FunctionInstantiation {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FieldInstantiation {
     pub handle: FieldHandleIndex,
     pub type_parameters: SignatureIndex,
@@ -368,7 +368,7 @@ pub struct FieldInstantiation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct StructDefinition {
     /// The `StructHandle` for this `StructDefinition`. This has the name and the abilities
     /// for the type.
@@ -401,7 +401,7 @@ impl StructDefinition {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FieldDefinition {
     /// The name of the field.
     pub name: IdentifierIndex,
@@ -414,7 +414,7 @@ pub struct FieldDefinition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 #[repr(u8)]
 pub enum Visibility {
     /// Accessible within its defining module only.
@@ -456,7 +456,7 @@ impl std::convert::TryFrom<u8> for Visibility {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(params = "usize"))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FunctionDefinition {
     /// The prototype of the function (module, name, signature).
     pub function: FunctionHandleIndex,
@@ -507,7 +507,7 @@ impl FunctionDefinition {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct TypeSignature(pub SignatureToken);
 
 // TODO: remove at some point or move it in the front end (language/move-ir-compiler)
@@ -516,7 +516,7 @@ pub struct TypeSignature(pub SignatureToken);
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(params = "usize"))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct FunctionSignature {
     /// The list of return types.
     #[cfg_attr(
@@ -541,7 +541,7 @@ pub struct FunctionSignature {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(params = "usize"))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct Signature(
     #[cfg_attr(
         any(test, feature = "fuzzing"),
@@ -572,7 +572,7 @@ pub type TypeParameterIndex = u16;
 #[repr(u8)]
 #[derive(Debug, Clone, Eq, Copy, Hash, Ord, PartialEq, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub enum Ability {
     /// Allows values of types with this ability to be copied, via CopyLoc or ReadRef
     Copy = 0x1,
@@ -630,7 +630,7 @@ impl Ability {
 
 /// A set of `Ability`s
 #[derive(Clone, Eq, Copy, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct AbilitySet(u8);
 
 impl AbilitySet {
@@ -861,7 +861,7 @@ impl Arbitrary for AbilitySet {
 /// A SignatureToken can express more types than the VM can handle safely, and correctness is
 /// enforced by the verifier.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub enum SignatureToken {
     /// Boolean, `true` or `false`.
     Bool,
@@ -1139,7 +1139,7 @@ impl SignatureToken {
 /// A `Constant` is a serialized value along with its type. That type will be deserialized by the
 /// loader/evauluator
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct Constant {
     pub type_: SignatureToken,
     pub data: Vec<u8>,
@@ -1149,7 +1149,7 @@ pub struct Constant {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(params = "usize"))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct CodeUnit {
     /// List of locals type. All locals are typed.
     pub locals: SignatureIndex,
@@ -1169,7 +1169,7 @@ pub struct CodeUnit {
 #[derive(Clone, Hash, Eq, VariantCount, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub enum Bytecode {
     /// Pop and discard the value at the top of the stack.
     /// The value on the stack must be an copyable type.
@@ -1813,6 +1813,7 @@ impl Bytecode {
 /// A CompiledScript defines the constant pools (string, address, signatures, etc.), the handle
 /// tables (external code references) and it has a `main` definition.
 #[derive(Clone, Default, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct CompiledScript {
     /// Version number found during deserialization
     pub version: u32,
@@ -1855,7 +1856,7 @@ impl CompiledScript {
 ///
 /// A module is published as a single entry and it is retrieved as a single blob.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary,dearbitrary::Dearbitrary))]
 pub struct CompiledModule {
     /// Version number found during deserialization
     pub version: u32,

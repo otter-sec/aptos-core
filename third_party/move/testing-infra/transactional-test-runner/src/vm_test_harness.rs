@@ -9,9 +9,10 @@ use crate::{
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use move_binary_format::{
+    access::ModuleAccess,
     compatibility::Compatibility,
     errors::{Location, VMError, VMResult},
-    file_format::CompiledScript,
+    file_format::{CompiledScript, FunctionDefinitionIndex},
     CompiledModule,
 };
 use move_command_line_common::{
@@ -39,12 +40,94 @@ use move_vm_test_utils::{gas_schedule::GasStatus, InMemoryStorage};
 use once_cell::sync::Lazy;
 use std::{collections::BTreeMap, path::Path};
 
+use self::dumper::RunnableScript;
+
 const STD_ADDR: AccountAddress = AccountAddress::ONE;
 
 struct SimpleVMTestAdapter<'a> {
     compiled_state: CompiledState<'a>,
     storage: InMemoryStorage,
     default_syntax: SyntaxChoice,
+}
+
+#[cfg(feature = "dumper")]
+pub mod dumper {
+    use arbitrary::*;
+    use dearbitrary::*;
+    use move_binary_format::{
+        file_format::{CompiledScript, FunctionDefinitionIndex},
+        CompiledModule,
+    };
+    use move_core_types::{language_storage::{ModuleId, TypeTag}, value::MoveValue};
+    use sha2::{Digest, Sha256};
+    use std::{io::Write, path::Path};
+
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub struct RunnableScript {
+        pub script: CompiledScript,
+        pub type_args: Vec<TypeTag>,
+        pub args: Vec<MoveValue>,
+    }
+
+    impl RunnableScript {
+        pub fn store(&self, folder: impl AsRef<Path>) {
+            std::fs::create_dir_all(folder.as_ref()).unwrap();
+            let mut d = Dearbitrator::new();
+            self.dearbitrary(&mut d);
+            let mvarb_data = d.finish();
+
+            let mut hasher = Sha256::new();
+            hasher.update(&mvarb_data);
+            let hash = hex::encode(hasher.finalize());
+
+            let mut mvarb_file =
+                std::fs::File::create(folder.as_ref().join(format!("{hash}.mvscript"))).unwrap();
+            mvarb_file.write_all(&mvarb_data).unwrap();
+            let mut u = Unstructured::new(&mvarb_data);
+            assert_eq!(self, &Self::arbitrary(&mut u).unwrap());
+        }
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub enum ExecVariant {
+        Script {
+            script: CompiledScript,
+            type_args: Vec<TypeTag>,
+            args: Vec<MoveValue>,
+        },
+        CallFunction {
+            module: ModuleId,
+            function: FunctionDefinitionIndex,
+            type_args: Vec<TypeTag>,
+            args: Vec<Vec<u8>>,
+        },
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub struct RunnableState {
+        pub dep_modules: Vec<CompiledModule>,
+        pub exec_variant: ExecVariant,
+    }
+
+    impl RunnableState {
+        pub fn store(&self, folder: impl AsRef<Path>) {
+            std::fs::create_dir_all(folder.as_ref()).unwrap();
+            let mut d = Dearbitrator::new();
+            self.dearbitrary(&mut d);
+            let mvarb_data = d.finish();
+
+            let mut hasher = Sha256::new();
+            hasher.update(&mvarb_data);
+            let hash = hex::encode(hasher.finalize());
+
+            let mut mvarb_file =
+                std::fs::File::create(folder.as_ref().join(format!("{hash}.mvrs"))).unwrap();
+            mvarb_file.write_all(&mvarb_data).unwrap();
+            let mut u = Unstructured::new(&mvarb_data);
+            assert_eq!(self, &Self::arbitrary(&mut u).unwrap());
+        }
+    }
 }
 
 pub fn view_resource_in_move_storage(
@@ -177,6 +260,33 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
     ) -> Result<(Option<String>, CompiledModule)> {
         let mut module_bytes = vec![];
         module.serialize(&mut module_bytes)?;
+        #[cfg(feature = "dumper")]
+        {
+            // use arbitrary::*;
+            // use dearbitrary::*;
+            // use sha2::{Digest, Sha256};
+            // use std::io::Write;
+            //
+            // let mut hasher = Sha256::new();
+            // hasher.update(&module_bytes);
+            // let hash = hex::encode(hasher.finalize());
+            //
+            // let gen_folder = Path::new("./seed_mv");
+            // std::fs::create_dir_all(gen_folder).unwrap();
+            // let mut mv_file = std::fs::File::create(gen_folder.join(format!("{hash}.mv"))).unwrap();
+            // mv_file.write_all(&module_bytes).unwrap();
+            //
+            // let gen_arb_folder = Path::new("./seed_mvarb");
+            // std::fs::create_dir_all(gen_arb_folder).unwrap();
+            // let mut d = Dearbitrator::new();
+            // module.dearbitrary(&mut d);
+            // let mvarb_data = d.finish();
+            // let mut mvarb_file =
+            //     std::fs::File::create(gen_arb_folder.join(format!("{hash}.mvarb"))).unwrap();
+            // mvarb_file.write_all(&mvarb_data).unwrap();
+            // let mut u = Unstructured::new(&mvarb_data);
+            // assert_eq!(module, CompiledModule::arbitrary(&mut u).unwrap());
+        }
 
         let id = module.self_id();
         let sender = *id.address();
@@ -229,11 +339,36 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
             .map(|arg| arg.simple_serialize().unwrap())
             .collect::<Vec<_>>();
         // TODO rethink testing signer args
-        let args = signers
+        let args: Vec<Vec<u8>> = signers
             .iter()
             .map(|a| MoveValue::Signer(*a).simple_serialize().unwrap())
             .chain(args)
             .collect();
+
+        #[cfg(feature = "dumper")]
+        {
+            let rs = dumper::RunnableState {
+                dep_modules: self
+                    .compiled_state
+                    .dep_modules()
+                    .cloned()
+                    .filter(|m| !self.compiled_state.is_precompiled_dep(&m.self_id()))
+                    .collect(),
+                exec_variant: dumper::ExecVariant::Script {
+                    script: script.clone(),
+                    type_args: type_args.clone(),
+                    args: txn_args.clone(),
+                },
+            };
+            rs.store(Path::new("./seeds_mvrs"));
+            let rs = RunnableScript {
+                script: script.clone(),
+                type_args: type_args.clone(),
+                args: txn_args.clone(),
+            };
+            rs.store(Path::new("./seeds_script"));
+        }
+
         let serialized_return_values = self
             .perform_session_action(
                 gas_budget,
@@ -271,11 +406,43 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
             .map(|arg| arg.simple_serialize().unwrap())
             .collect::<Vec<_>>();
         // TODO rethink testing signer args
-        let args = signers
+        let args: Vec<Vec<u8>> = signers
             .iter()
             .map(|a| MoveValue::Signer(*a).simple_serialize().unwrap())
             .chain(args)
             .collect();
+
+        #[cfg(feature = "dumper")]
+        {
+            if let Some(mdl) = self
+                .compiled_state
+                .dep_modules()
+                .find(|cm| &cm.self_id() == module)
+            {
+                if let Some((fdi, _)) = mdl.function_defs().iter().enumerate().find(|(_, fd)| {
+                    let fh = mdl.function_handle_at(fd.function);
+                    let id = mdl.identifier_at(fh.name);
+                    id == function
+                }) {
+                    let rs = dumper::RunnableState {
+                        dep_modules: self
+                            .compiled_state
+                            .dep_modules()
+                            .cloned()
+                            .filter(|m| !self.compiled_state.is_precompiled_dep(&m.self_id()))
+                            .collect(),
+                        exec_variant: dumper::ExecVariant::CallFunction {
+                            module: module.clone(),
+                            function: FunctionDefinitionIndex(fdi as u16),
+                            type_args: type_args.clone(),
+                            args: args.clone(),
+                        },
+                    };
+                    rs.store(Path::new("./seeds_mvrs"));
+                }
+            }
+        }
+
         let serialized_return_values = self
             .perform_session_action(
                 gas_budget,

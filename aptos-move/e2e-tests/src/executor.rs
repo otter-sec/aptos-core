@@ -86,7 +86,6 @@ pub struct FakeExecutor {
     data_store: FakeDataStore,
     executor_thread_pool: Arc<rayon::ThreadPool>,
     block_time: u64,
-    executed_output: Option<GoldenOutputs>,
     trace_dir: Option<PathBuf>,
     rng: KeyGen,
     no_parallel_exec: bool,
@@ -108,7 +107,7 @@ impl FakeExecutor {
             data_store: FakeDataStore::default(),
             executor_thread_pool,
             block_time: 0,
-            executed_output: None,
+            
             trace_dir: None,
             rng: KeyGen::from_seed(RNG_SEED),
             no_parallel_exec: false,
@@ -174,7 +173,6 @@ impl FakeExecutor {
             data_store: FakeDataStore::default(),
             executor_thread_pool,
             block_time: 0,
-            executed_output: None,
             trace_dir: None,
             rng: KeyGen::from_seed(RNG_SEED),
             no_parallel_exec: false,
@@ -188,7 +186,6 @@ impl FakeExecutor {
         // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
         // files can persist on windows machines.
         let file_name = test_name.replace(':', "_");
-        self.executed_output = Some(GoldenOutputs::new(&file_name));
         self.set_tracing(test_name, file_name)
     }
 
@@ -196,7 +193,6 @@ impl FakeExecutor {
         // 'test_name' includes ':' in the names, lets re-write these to be '_'s so that these
         // files can persist on windows machines.
         let file_name = test_name.replace(':', "_");
-        self.executed_output = Some(GoldenOutputs::new_at_path(PathBuf::from(path), &file_name));
         self.set_tracing(test_name, file_name)
     }
 
@@ -442,9 +438,9 @@ impl FakeExecutor {
             assert_eq!(output, parallel_output);
         }
 
-        if let Some(logger) = &self.executed_output {
-            logger.log(format!("{:#?}\n", output).as_str());
-        }
+        // if let Some(logger) = &self.executed_output {
+        //     logger.log(format!("{:#?}\n", output).as_str());
+        // }
 
         // dump serialized transaction output after execution, if tracing
         if let Some(trace_dir) = &self.trace_dir {
