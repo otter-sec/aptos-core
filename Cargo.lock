@@ -5363,7 +5363,7 @@ dependencies = [
 [[package]]
 name = "dearbitrary"
 version = "1.2.0"
-source = "git+ssh://git@github.com/otter-sec/dearbitrary.git#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
+source = "git+https://github.com/otter-sec/dearbitrary#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
 dependencies = [
  "derive_dearbitrary",
 ]
@@ -5408,7 +5408,7 @@ dependencies = [
 [[package]]
 name = "derive_dearbitrary"
 version = "1.2.0"
-source = "git+ssh://git@github.com/otter-sec/dearbitrary.git#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
+source = "git+https://github.com/otter-sec/dearbitrary#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
 dependencies = [
  "proc-macro2 1.0.59",
  "quote 1.0.28",
