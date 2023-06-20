@@ -5361,6 +5361,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dearbitrary"
+version = "1.2.0"
+source = "git+ssh://git@github.com/otter-sec/dearbitrary.git#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
+dependencies = [
+ "derive_dearbitrary",
+]
+
+[[package]]
 name = "debug-ignore"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5395,6 +5403,16 @@ dependencies = [
  "proc-macro2 1.0.59",
  "quote 1.0.28",
  "syn 2.0.18",
+]
+
+[[package]]
+name = "derive_dearbitrary"
+version = "1.2.0"
+source = "git+ssh://git@github.com/otter-sec/dearbitrary.git#08de30e99c6c6b9a3d3f4959f22bb245faa8da8b"
+dependencies = [
+ "proc-macro2 1.0.59",
+ "quote 1.0.28",
+ "syn 1.0.105",
 ]
 
 [[package]]
@@ -8110,6 +8128,7 @@ version = "0.0.3"
 dependencies = [
  "anyhow",
  "arbitrary 1.3.0",
+ "dearbitrary",
  "indexmap",
  "move-core-types",
  "once_cell",
@@ -8288,6 +8307,7 @@ dependencies = [
  "anyhow",
  "arbitrary 1.3.0",
  "bcs 0.1.4",
+ "dearbitrary",
  "ethnum",
  "hex",
  "num",
