@@ -4,6 +4,10 @@ spec aptos_framework::account {
         pragma aborts_if_is_strict;
     }
 
+    spec Account {
+        invariant sequence_number <= MAX_U64;
+    }
+
     /// Only the address `@aptos_framework` can call.
     /// OriginatingAddress does not exist under `@aptos_framework` before the call.
     spec initialize(aptos_framework: &signer) {
