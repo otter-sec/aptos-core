@@ -21,6 +21,8 @@ spec aptos_framework::account {
         aborts_if new_address == @vm_reserved || new_address == @aptos_framework || new_address == @aptos_token;
         ensures signer::address_of(result) == new_address;
         ensures exists<Account>(new_address);
+        let post new_account = global<Account>(new_address);
+        ensures new_account.sequence_number == 0 && new_account.guid_creation_num == 2;
     }
 
     /// Check if the bytes of the new address is 32.
@@ -29,6 +31,8 @@ spec aptos_framework::account {
         include CreateAccountAbortsIf {addr: new_address};
         ensures signer::address_of(result) == new_address;
         ensures exists<Account>(new_address);
+        let post new_account = global<Account>(new_address);
+        ensures new_account.sequence_number == 0 && new_account.guid_creation_num == 2;
     }
 
     spec exists_at {

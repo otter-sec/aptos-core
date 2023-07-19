@@ -178,6 +178,10 @@ spec aptos_framework::voting {
         include AbortsIfNotContainProposalID<ProposalType>;
         aborts_if !std::string::spec_internal_check_utf8(IS_MULTI_STEP_PROPOSAL_IN_EXECUTION_KEY);
         aborts_if !std::string::spec_internal_check_utf8(IS_MULTI_STEP_PROPOSAL_KEY);
+        let proposal = table::spec_get(global<VotingForum<ProposalType>>(voting_forum_address).proposals, proposal_id);
+        let single_step = vector::length(next_execution_hash) == 0 && !simple_map::spec_contains_key(proposal.metadata, utf8(IS_MULTI_STEP_PROPOSAL_KEY));
+        ensures single_step ==> proposal.is_resolved == true;
+        ensures !single_step ==> proposal.is_resolved == false;
     }
 
     spec next_proposal_id<ProposalType: store>(voting_forum_address: address): u64 {
