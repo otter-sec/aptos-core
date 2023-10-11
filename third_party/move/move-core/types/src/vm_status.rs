@@ -49,6 +49,7 @@ pub static EXECUTION_STATUS_MAX_CODE: u64 = 4999;
 /// - `Error` indicating an error from the VM itself
 /// - `MoveAbort` indicating an `abort` ocurred inside of a Move program
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
 pub enum VMStatus {
@@ -85,6 +86,7 @@ pub fn err_msg<S: Into<String>>(s: S) -> Option<String> {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
 pub enum KeptVMStatus {
@@ -110,6 +112,7 @@ pub type DiscardedVMStatus = StatusCode;
 /// An `AbortLocation` specifies where a Move program `abort` occurred, either in a function in
 /// a module, or in a script
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
 pub enum AbortLocation {
@@ -489,6 +492,7 @@ derive_status_try_from_repr! {
 #[repr(u64)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 /// We don't derive Arbitrary on this enum because it is too large and breaks proptest. It is
 /// written for a subset of these in proptest_types. We test conversion between this and protobuf
 /// with a hand-written test.
