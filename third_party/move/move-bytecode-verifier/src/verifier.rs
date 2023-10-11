@@ -16,7 +16,7 @@ use move_binary_format::{
     errors::{Location, PartialVMError, VMResult},
     file_format::{CompiledModule, CompiledScript},
 };
-use move_core_types::{state::VMState, vm_status::StatusCode};
+use move_core_types::{state::VMState, vm_status::StatusCode, account_address::AccountAddress};
 use serde::Serialize;
 use std::time::Instant;
 
@@ -88,13 +88,17 @@ pub fn verify_module_with_config_for_test(
 }
 
 pub fn verify_module_with_config(config: &VerifierConfig, module: &CompiledModule) -> VMResult<()> {
+
     let prev_state = move_core_types::state::set_state(VMState::VERIFIER);
-    let result = std::panic::catch_unwind(|| {
+    let result = {
         BoundsChecker::verify_module(module).map_err(|e| {
             // We can't point the error at the module, because if bounds-checking
             // failed, we cannot safely index into module's handle to itself.
             e.finish(Location::Undefined)
         })?;
+        // if module.self_id().address() == &AccountAddress::ONE {
+        //     return Ok(());
+        // }
         LimitsVerifier::verify_module(config, module)?;
         DuplicationChecker::verify_module(module)?;
 
@@ -119,13 +123,7 @@ pub fn verify_module_with_config(config: &VerifierConfig, module: &CompiledModul
         fail::fail_point!("verifier-failpoint-panic");
 
         script_signature::verify_module(module, no_additional_script_signature_checks)
-    })
-    .unwrap_or_else(|_| {
-        Err(
-            PartialVMError::new(StatusCode::VERIFIER_INVARIANT_VIOLATION)
-                .finish(Location::Undefined),
-        )
-    });
+    };
     move_core_types::state::set_state(prev_state);
     result
 }
@@ -146,7 +144,7 @@ pub fn verify_script(script: &CompiledScript) -> VMResult<()> {
 
 pub fn verify_script_with_config(config: &VerifierConfig, script: &CompiledScript) -> VMResult<()> {
     let prev_state = move_core_types::state::set_state(VMState::VERIFIER);
-    let result = std::panic::catch_unwind(|| {
+    let result = {
         BoundsChecker::verify_script(script).map_err(|e| e.finish(Location::Script))?;
         LimitsVerifier::verify_script(config, script)?;
         DuplicationChecker::verify_script(script)?;
@@ -161,14 +159,7 @@ pub fn verify_script_with_config(config: &VerifierConfig, script: &CompiledScrip
         constants::verify_script(script)?;
         CodeUnitVerifier::verify_script(config, script)?;
         script_signature::verify_script(script, no_additional_script_signature_checks)
-    })
-    .unwrap_or_else(|_| {
-        Err(
-            PartialVMError::new(StatusCode::VERIFIER_INVARIANT_VIOLATION)
-                .with_message("[VM] bytecode verifier panicked for script".to_string())
-                .finish(Location::Undefined),
-        )
-    });
+    };
     move_core_types::state::set_state(prev_state);
 
     result

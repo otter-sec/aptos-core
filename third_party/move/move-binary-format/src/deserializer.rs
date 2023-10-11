@@ -48,17 +48,12 @@ impl CompiledModule {
         config: &DeserializerConfig,
     ) -> BinaryLoaderResult<Self> {
         let prev_state = move_core_types::state::set_state(VMState::DESERIALIZER);
-        let result = std::panic::catch_unwind(|| {
+        let result = {
             let module = deserialize_compiled_module(binary, config)?;
             BoundsChecker::verify_module(&module)?;
 
             Ok(module)
-        })
-        .unwrap_or_else(|_| {
-            Err(PartialVMError::new(
-                StatusCode::VERIFIER_INVARIANT_VIOLATION,
-            ))
-        });
+        };
         move_core_types::state::set_state(prev_state);
 
         result
