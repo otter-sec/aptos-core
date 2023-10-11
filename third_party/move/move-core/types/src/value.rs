@@ -29,7 +29,7 @@ pub const MOVE_STRUCT_TYPE: &str = "type";
 pub const MOVE_STRUCT_FIELDS: &str = "fields";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 pub enum MoveStruct {
     /// The representation used by the MoveVM
     Runtime(Vec<MoveValue>),
@@ -43,7 +43,7 @@ pub enum MoveStruct {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 pub enum MoveValue {
     U8(u8),
     U64(u64),
