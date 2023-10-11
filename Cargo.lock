@@ -3757,11 +3757,13 @@ dependencies = [
  "aptos-bitvec",
  "aptos-crypto",
  "aptos-crypto-derive",
+ "arbitrary",
  "arr_macro",
  "bcs 0.1.4",
  "bytes",
  "chrono",
  "claims",
+ "dearbitrary",
  "derivative",
  "hex",
  "itertools",
@@ -5920,6 +5922,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaa37046cc0f6c3cc6090fbdbf73ef0b8ef4cfcc37f6befc0020f63e8cf121e1"
 dependencies = [
  "tokio",
+]
+
+[[package]]
+name = "dearbitrary"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83c7269f77c42056e4d46a6c2afe8e0bddaa2e8b1443aacc14bca0efb77986a4"
+dependencies = [
+ "dearbitrary_derive",
+]
+
+[[package]]
+name = "dearbitrary_derive"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1fe15a6c62bbebc1f18bceb1437ed5002f0da569e7f10e46cf8f71c5bd868c5"
+dependencies = [
+ "proc-macro2 1.0.64",
+ "quote 1.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -8994,6 +9016,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "backtrace",
+ "dearbitrary",
  "indexmap",
  "move-core-types",
  "once_cell",
@@ -9213,6 +9236,7 @@ dependencies = [
  "arbitrary",
  "bcs 0.1.4",
  "bytes",
+ "dearbitrary",
  "ethnum",
  "hex",
  "num 0.4.0",
@@ -9741,10 +9765,13 @@ name = "move-transactional-test-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "clap 4.3.21",
  "colored",
  "datatest-stable",
+ "dearbitrary",
  "difference",
+ "hex",
  "move-binary-format",
  "move-bytecode-source-map",
  "move-bytecode-utils",
@@ -9766,6 +9793,7 @@ dependencies = [
  "once_cell",
  "rayon",
  "regex",
+ "sha2 0.10.6",
  "tempfile",
  "termcolor",
 ]
