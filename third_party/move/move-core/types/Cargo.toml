@@ -12,7 +12,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.52"
 arbitrary = { version = "1.3.2", features = [ "derive_arbitrary"], optional = true }
-dearbitrary = { version = "1.0.2", features = ["derive"], optional = true }
+dearbitrary = { version = "1.0.4", features = ["derive"], optional = true }
 bytes = { version = "1.4.0" }
 ethnum = "1.0.4"
 hex = "0.4.3"

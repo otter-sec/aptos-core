@@ -6235,22 +6235,11 @@ dependencies = [
 
 [[package]]
 name = "dearbitrary"
-version = "1.0.2"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83c7269f77c42056e4d46a6c2afe8e0bddaa2e8b1443aacc14bca0efb77986a4"
+checksum = "708ee6091d6965eb85c69f7a707303dcc48cc55fd937fb30e531909a10b314d4"
 dependencies = [
- "dearbitrary_derive",
-]
-
-[[package]]
-name = "dearbitrary_derive"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1fe15a6c62bbebc1f18bceb1437ed5002f0da569e7f10e46cf8f71c5bd868c5"
-dependencies = [
- "proc-macro2 1.0.64",
- "quote 1.0.29",
- "syn 2.0.32",
+ "derive_dearbitrary",
 ]
 
 [[package]]
@@ -6328,6 +6317,17 @@ dependencies = [
  "proc-macro2 1.0.64",
  "quote 1.0.29",
  "syn 2.0.32",
+]
+
+[[package]]
+name = "derive_dearbitrary"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afdf9e6fb6c8a925c6b19b78ec3a80152e7a46dc7811be5f1fa64568e7c7b6c0"
+dependencies = [
+ "proc-macro2 1.0.64",
+ "quote 1.0.29",
+ "syn 1.0.105",
 ]
 
 [[package]]
