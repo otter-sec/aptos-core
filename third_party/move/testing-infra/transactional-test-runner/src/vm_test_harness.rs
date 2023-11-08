@@ -80,8 +80,7 @@ pub mod dumper {
     impl RunnableScript {
         pub fn store(&self, folder: impl AsRef<Path>) {
             std::fs::create_dir_all(folder.as_ref()).unwrap();
-            let mut d = Dearbitrator::new();
-            self.dearbitrary(&mut d);
+            let d = self.dearbitrary_first();
             let mvarb_data = d.finish();
 
             let mut hasher = Sha256::new();
@@ -92,7 +91,7 @@ pub mod dumper {
                 std::fs::File::create(folder.as_ref().join(format!("{hash}.mvscript"))).unwrap();
             mvarb_file.write_all(&mvarb_data).unwrap();
             let mut u = Unstructured::new(&mvarb_data);
-            assert_eq!(self, &Self::arbitrary(&mut u).unwrap());
+            assert_eq!(self, &Self::arbitrary_take_rest(u).unwrap());
         }
     }
 
@@ -120,8 +119,7 @@ pub mod dumper {
     impl RunnableState {
         pub fn store(&self, folder: impl AsRef<Path>) {
             std::fs::create_dir_all(folder.as_ref()).unwrap();
-            let mut d = Dearbitrator::new();
-            self.dearbitrary(&mut d);
+            let d = self.dearbitrary_first();
             let mvarb_data = d.finish();
 
             let mut hasher = Sha256::new();
@@ -132,7 +130,7 @@ pub mod dumper {
                 std::fs::File::create(folder.as_ref().join(format!("{hash}.mvrs"))).unwrap();
             mvarb_file.write_all(&mvarb_data).unwrap();
             let mut u = Unstructured::new(&mvarb_data);
-            assert_eq!(self, &Self::arbitrary(&mut u).unwrap());
+            assert_eq!(self, &Self::arbitrary_take_rest(u).unwrap());
         }
     }
 }

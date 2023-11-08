@@ -873,7 +873,7 @@ impl Arbitrary for AbilitySet {
 ///   reads *(object::address_of(function_parameter_name))
 /// ```
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, Debug)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct AccessSpecifier {
     /// The kind of access: read, write, or both.
@@ -888,7 +888,7 @@ pub struct AccessSpecifier {
 
 /// The kind of specified access.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd, Debug)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub enum AccessKind {
     Reads,
@@ -931,7 +931,7 @@ impl fmt::Display for AccessKind {
 
 /// The specification of a resource in an access specifier.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, Debug)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub enum ResourceSpecifier {
     /// Any resource
@@ -948,7 +948,7 @@ pub enum ResourceSpecifier {
 
 /// The specification of an address in an access specifier.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, Debug)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub enum AddressSpecifier {
     /// Resource can be stored at any address.

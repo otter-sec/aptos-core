@@ -539,10 +539,6 @@ impl FakeExecutor {
 
         let output = sequential_output.or(parallel_output).unwrap();
 
-        if let Some(logger) = &self.executed_output {
-            logger.log(format!("{:#?}\n", output).as_str());
-        }
-
         // dump serialized transaction output after execution, if tracing
         if let Some(trace_dir) = &self.trace_dir {
             match &output {
