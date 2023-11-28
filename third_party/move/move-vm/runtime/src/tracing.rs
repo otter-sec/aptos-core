@@ -75,21 +75,21 @@ pub(crate) fn trace(
     loader: &Loader,
     interp: &Interpreter,
 ) {
-    if *TRACING_ENABLED {
-        let buf_writer = &mut *LOGGING_FILE_WRITER.lock().unwrap();
-        buf_writer
-            .write_fmt(format_args!("{},{}\n", function_desc.pretty_string(), pc,))
-            .unwrap();
-        if *SINGLE_STEP_FLUSHING {
-            buf_writer.flush().unwrap();
-        }
-    }
-    if *DEBUGGING_ENABLED {
-        DEBUG_CONTEXT
-            .lock()
-            .unwrap()
-            .debug_loop(function_desc, locals, pc, instr, loader, interp);
-    }
+    // if *TRACING_ENABLED {
+    //     let buf_writer = &mut *LOGGING_FILE_WRITER.lock().unwrap();
+    //     buf_writer
+    //         .write_fmt(format_args!("{},{}\n", function_desc.pretty_string(), pc,))
+    //         .unwrap();
+    //     if *SINGLE_STEP_FLUSHING {
+    //         buf_writer.flush().unwrap();
+    //     }
+    // }
+    // if *DEBUGGING_ENABLED {
+    //     DEBUG_CONTEXT
+    //         .lock()
+    //         .unwrap()
+    //         .debug_loop(function_desc, locals, pc, instr, loader, interp);
+    // }
 }
 
 #[macro_export]

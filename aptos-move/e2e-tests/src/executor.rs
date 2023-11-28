@@ -60,6 +60,9 @@ use aptos_vm_genesis::{generate_genesis_change_set_for_testing_with_count, Genes
 use aptos_vm_logging::log_schema::AdapterLogSchema;
 use aptos_vm_types::storage::{ChangeSetConfigs, StorageGasParameters};
 use bytes::Bytes;
+use move_binary_format::{
+    access::ModuleAccess, file_format::FunctionDefinitionIndex, CompiledModule,
+};
 use move_core_types::{
     account_address::AccountAddress,
     identifier::Identifier,
@@ -76,6 +79,8 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
+
+use self::dumper::{ExecVariant, RunnableState, LAST_MODULES};
 
 static RNG_SEED: [u8; 32] = [9u8; 32];
 
@@ -102,6 +107,89 @@ pub enum ExecutorMode {
     ParallelOnly,
     // Runs sequential, then parallel, and compares outputs.
     BothComparison,
+}
+
+pub mod dumper {
+    use arbitrary::*;
+    use dearbitrary::*;
+    use move_binary_format::{
+        file_format::{CompiledScript, FunctionDefinitionIndex},
+        CompiledModule,
+    };
+    use move_core_types::{
+        language_storage::{ModuleId, TypeTag},
+        value::MoveValue,
+    };
+    use once_cell::sync::Lazy;
+    use sha2::{Digest, Sha256};
+    use std::sync::Mutex;
+    use std::{io::Write, path::Path};
+
+    pub static LAST_MODULES: Lazy<Mutex<Vec<Vec<u8>>>> = Lazy::new(|| Mutex::new(vec![]));
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub struct RunnableScript {
+        pub script: CompiledScript,
+        pub type_args: Vec<TypeTag>,
+        pub args: Vec<MoveValue>,
+    }
+
+    impl RunnableScript {
+        pub fn store(&self, folder: impl AsRef<Path>) {
+            std::fs::create_dir_all(folder.as_ref()).unwrap();
+            let d = self.dearbitrary_first();
+            let mvarb_data = d.finish();
+
+            let mut hasher = Sha256::new();
+            hasher.update(&mvarb_data);
+            let hash = hex::encode(hasher.finalize());
+
+            let mut mvarb_file =
+                std::fs::File::create(folder.as_ref().join(format!("{hash}.mvscript"))).unwrap();
+            mvarb_file.write_all(&mvarb_data).unwrap();
+            let mut u = Unstructured::new(&mvarb_data);
+            assert_eq!(self, &Self::arbitrary_take_rest(u).unwrap());
+        }
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub enum ExecVariant {
+        Script {
+            script: CompiledScript,
+            type_args: Vec<TypeTag>,
+            args: Vec<MoveValue>,
+        },
+        CallFunction {
+            module: ModuleId,
+            function: FunctionDefinitionIndex,
+            type_args: Vec<TypeTag>,
+            args: Vec<Vec<u8>>,
+        },
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    pub struct RunnableState {
+        pub dep_modules: Vec<CompiledModule>,
+        pub exec_variant: ExecVariant,
+    }
+
+    impl RunnableState {
+        pub fn store(&self, folder: impl AsRef<Path>) {
+            std::fs::create_dir_all(folder.as_ref()).unwrap();
+            let d = self.dearbitrary_first();
+            let mvarb_data = d.finish();
+
+            let mut hasher = Sha256::new();
+            hasher.update(&mvarb_data);
+            let hash = hex::encode(hasher.finalize());
+
+            let mut mvarb_file =
+                std::fs::File::create(folder.as_ref().join(format!("{hash}.mvrs"))).unwrap();
+            mvarb_file.write_all(&mvarb_data).unwrap();
+            let mut u = Unstructured::new(&mvarb_data);
+            assert_eq!(self, &Self::arbitrary_take_rest(u).unwrap());
+        }
+    }
 }
 
 /// Provides an environment to run a VM instance.
@@ -142,7 +230,7 @@ impl FakeExecutor {
             event_store: Vec::new(),
             // executor_thread_pool,
             block_time: 0,
-            
+
             trace_dir: None,
             rng: KeyGen::from_seed(RNG_SEED),
             executor_mode: None,
@@ -485,6 +573,46 @@ impl FakeExecutor {
             for txn in &txn_block {
                 let input_seq = Self::trace(trace_input_dir.as_path(), txn);
                 trace_map.1.push(input_seq);
+            }
+        }
+
+        for t in txn_block.clone().into_iter() {
+            if let Transaction::UserTransaction(st) = t {
+                let rt = st.into_raw_transaction();
+                let pld = rt.into_payload();
+                if let TransactionPayload::EntryFunction(ef) = pld {
+                    let dep_modules: Vec<CompiledModule> = LAST_MODULES
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .flat_map(|v| CompiledModule::deserialize(&v))
+                        .collect();
+
+                    let module = ef.module();
+                    let function = ef.function();
+
+                    if let Some(mdl) = dep_modules.iter().find(|cm| &cm.self_id() == module) {
+                        if let Some((fdi, _)) =
+                            mdl.function_defs().iter().enumerate().find(|(_, fd)| {
+                                let fh = mdl.function_handle_at(fd.function);
+                                let id = mdl.identifier_at(fh.name);
+                                id == function
+                            })
+                        {
+                            let rs = dumper::RunnableState {
+                                dep_modules,
+                                exec_variant: dumper::ExecVariant::CallFunction {
+                                    module: module.clone(),
+                                    function: FunctionDefinitionIndex(fdi as u16),
+                                    type_args: ef.ty_args().to_vec(),
+                                    args: ef.args().to_vec(),
+                                },
+                            };
+                            rs.store(Path::new("./seeds_mvrs"));
+                        }
+                    }
+
+                }
             }
         }
 

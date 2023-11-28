@@ -39,7 +39,7 @@ bcs = { workspace = true }
 bytes = { workspace = true }
 goldenfile = { workspace = true }
 hex = { workspace = true }
-move-binary-format = { workspace = true }
+move-binary-format = { workspace = true, features = ["fuzzing"] }
 move-command-line-common = { workspace = true }
 move-core-types = { workspace = true, features = ["fuzzing"] }
 move-ir-compiler = { workspace = true }
@@ -53,3 +53,6 @@ proptest-derive = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
+arbitrary = { version = "1.3.2", features = ["derive"] }
+dearbitrary = { version = "1.0.2", features = ["derive"] }

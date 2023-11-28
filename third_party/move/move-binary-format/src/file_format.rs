@@ -305,6 +305,7 @@ pub struct FunctionHandle {
         any(test, feature = "fuzzing"),
         proptest(filter = "|x| x.as_ref().map(|v| v.len() <= 64).unwrap_or(true)")
     )]
+    // #[cfg_attr(feature = "fuzzing", arbitrary(default))]
     pub access_specifiers: Option<Vec<AccessSpecifier>>,
 }
 

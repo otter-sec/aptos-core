@@ -133,10 +133,10 @@ fn string_args_good() {
     tests.push(("0xcafe::test::hi", vec![(args, expected_change)]));
 
     let str128 = std::str::from_utf8(&[97u8; 128] as &[u8]).unwrap();
-    tests.push(("0xcafe::test::hi", vec![(
-        vec![bcs::to_bytes(str128.as_bytes()).unwrap()],
-        str128,
-    )]));
+    tests.push((
+        "0xcafe::test::hi",
+        vec![(vec![bcs::to_bytes(str128.as_bytes()).unwrap()], str128)],
+    ));
 
     // vector of strings
     let mut in_out = vec![];
@@ -400,6 +400,26 @@ fn string_args_bad_utf8() {
 }
 
 #[test]
+fn huge_string_arg_poc() {
+    let mut tests = vec![];
+    let mut len: u64 = 1_000_000_000_000;
+    let mut big_str_arg = vec![];
+    // code borrowed from write_u64_as_uleb128
+    loop {
+        let cur = len & 0x7F;
+        if cur != len {
+            big_str_arg.push((cur | 0x80) as u8);
+            len >>= 7;
+        } else {
+            big_str_arg.push(cur as u8);
+            break;
+        }
+    }
+    tests.push(("0xcafe::test::hi", vec![big_str_arg], abort_info()));
+    fail(tests);
+}
+
+#[test]
 fn string_args_chopped() {
     let idx = 0u64;
     let s_vec = vec![
@@ -573,20 +593,20 @@ fn string_args_bad_length() {
 
 #[test]
 fn string_args_non_generic_call() {
-    let tests = vec![("0xcafe::test::non_generic_call", vec![(
-        vec![bcs::to_bytes("hi".as_bytes()).unwrap()],
-        "hi",
-    )])];
+    let tests = vec![(
+        "0xcafe::test::non_generic_call",
+        vec![(vec![bcs::to_bytes("hi".as_bytes()).unwrap()], "hi")],
+    )];
 
     success_generic(vec![], tests);
 }
 
 #[test]
 fn string_args_generic_call() {
-    let tests = vec![("0xcafe::test::generic_call", vec![(
-        vec![bcs::to_bytes("hi".as_bytes()).unwrap()],
-        "hi",
-    )])];
+    let tests = vec![(
+        "0xcafe::test::generic_call",
+        vec![(vec![bcs::to_bytes("hi".as_bytes()).unwrap()], "hi")],
+    )];
 
     let string_struct = StructTag {
         address: AccountAddress::from_hex_literal("0x1").expect("valid address"),
@@ -641,10 +661,10 @@ fn string_args_generic_instantiation() {
         bcs::to_bytes(&j).unwrap(),
     ];
 
-    tests.push(("0xcafe::test::generic_multi_vec", vec![(
-        args,
-        "hi there! hello",
-    )]));
+    tests.push((
+        "0xcafe::test::generic_multi_vec",
+        vec![(args, "hi there! hello")],
+    ));
 
     let address_type = TypeTag::Address;
     let string_struct = StructTag {

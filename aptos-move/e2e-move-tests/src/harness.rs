@@ -12,7 +12,7 @@ use aptos_gas_schedule::{
 };
 use aptos_language_e2e_tests::{
     account::{Account, AccountData},
-    executor::FakeExecutor,
+    executor::{dumper::LAST_MODULES, FakeExecutor},
 };
 use aptos_types::{
     access_path::AccessPath,
@@ -45,7 +45,9 @@ use rand::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
+    borrow::BorrowMut,
     collections::{BTreeMap, HashMap},
+    mem::swap,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -353,6 +355,10 @@ impl MoveHarness {
             .extract_metadata()
             .expect("extracting package metadata must succeed");
         patch_metadata(&mut metadata);
+        // mem LAST_MODULES.lock().unwrap()
+        let mut code_copy = code.clone();
+        swap(LAST_MODULES.lock().unwrap().as_mut(), &mut code_copy);
+        drop(code_copy);
         self.create_transaction_payload(
             account,
             aptos_stdlib::code_publish_package_txn(
@@ -597,14 +603,18 @@ impl MoveHarness {
         let acc = self.aptos_framework_account();
         let enabled = enabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
         let disabled = disabled.into_iter().map(|f| f as u64).collect::<Vec<_>>();
-        self.executor
-            .exec("features", "change_feature_flags", vec![], vec![
+        self.executor.exec(
+            "features",
+            "change_feature_flags",
+            vec![],
+            vec![
                 MoveValue::Signer(*acc.address())
                     .simple_serialize()
                     .unwrap(),
                 bcs::to_bytes(&enabled).unwrap(),
                 bcs::to_bytes(&disabled).unwrap(),
-            ]);
+            ],
+        );
     }
 
     /// Increase maximal transaction size.
@@ -629,15 +639,19 @@ impl MoveHarness {
             entries,
         };
         let schedule_bytes = bcs::to_bytes(&gas_schedule).expect("bcs");
-        self.executor
-            .exec("gas_schedule", "set_gas_schedule", vec![], vec![
+        self.executor.exec(
+            "gas_schedule",
+            "set_gas_schedule",
+            vec![],
+            vec![
                 MoveValue::Signer(AccountAddress::ONE)
                     .simple_serialize()
                     .unwrap(),
                 MoveValue::vector_u8(schedule_bytes)
                     .simple_serialize()
                     .unwrap(),
-            ]);
+            ],
+        );
     }
 
     pub fn sequence_number(&self, addr: &AccountAddress) -> u64 {

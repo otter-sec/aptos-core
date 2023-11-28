@@ -38,10 +38,13 @@ pub(crate) struct FunctionId {
 
 type ConstructorMap = Lazy<BTreeMap<String, FunctionId>>;
 static OLD_ALLOWED_STRUCTS: ConstructorMap = Lazy::new(|| {
-    [("0x1::string::String", FunctionId {
-        module_id: ModuleId::new(AccountAddress::ONE, Identifier::from(ident_str!("string"))),
-        func_name: ident_str!("utf8"),
-    })]
+    [(
+        "0x1::string::String",
+        FunctionId {
+            module_id: ModuleId::new(AccountAddress::ONE, Identifier::from(ident_str!("string"))),
+            func_name: ident_str!("utf8"),
+        },
+    )]
     .into_iter()
     .map(|(s, validator)| (s.to_string(), validator))
     .collect()
@@ -49,32 +52,56 @@ static OLD_ALLOWED_STRUCTS: ConstructorMap = Lazy::new(|| {
 
 static NEW_ALLOWED_STRUCTS: ConstructorMap = Lazy::new(|| {
     [
-        ("0x1::string::String", FunctionId {
-            module_id: ModuleId::new(AccountAddress::ONE, Identifier::from(ident_str!("string"))),
-            func_name: ident_str!("utf8"),
-        }),
-        ("0x1::object::Object", FunctionId {
-            module_id: ModuleId::new(AccountAddress::ONE, Identifier::from(ident_str!("object"))),
-            func_name: ident_str!("address_to_object"),
-        }),
-        ("0x1::option::Option", FunctionId {
-            module_id: ModuleId::new(AccountAddress::ONE, Identifier::from(ident_str!("option"))),
-            func_name: ident_str!("from_vec"),
-        }),
-        ("0x1::fixed_point32::FixedPoint32", FunctionId {
-            module_id: ModuleId::new(
-                AccountAddress::ONE,
-                Identifier::from(ident_str!("fixed_point32")),
-            ),
-            func_name: ident_str!("create_from_raw_value"),
-        }),
-        ("0x1::fixed_point64::FixedPoint64", FunctionId {
-            module_id: ModuleId::new(
-                AccountAddress::ONE,
-                Identifier::from(ident_str!("fixed_point64")),
-            ),
-            func_name: ident_str!("create_from_raw_value"),
-        }),
+        (
+            "0x1::string::String",
+            FunctionId {
+                module_id: ModuleId::new(
+                    AccountAddress::ONE,
+                    Identifier::from(ident_str!("string")),
+                ),
+                func_name: ident_str!("utf8"),
+            },
+        ),
+        (
+            "0x1::object::Object",
+            FunctionId {
+                module_id: ModuleId::new(
+                    AccountAddress::ONE,
+                    Identifier::from(ident_str!("object")),
+                ),
+                func_name: ident_str!("address_to_object"),
+            },
+        ),
+        (
+            "0x1::option::Option",
+            FunctionId {
+                module_id: ModuleId::new(
+                    AccountAddress::ONE,
+                    Identifier::from(ident_str!("option")),
+                ),
+                func_name: ident_str!("from_vec"),
+            },
+        ),
+        (
+            "0x1::fixed_point32::FixedPoint32",
+            FunctionId {
+                module_id: ModuleId::new(
+                    AccountAddress::ONE,
+                    Identifier::from(ident_str!("fixed_point32")),
+                ),
+                func_name: ident_str!("create_from_raw_value"),
+            },
+        ),
+        (
+            "0x1::fixed_point64::FixedPoint64",
+            FunctionId {
+                module_id: ModuleId::new(
+                    AccountAddress::ONE,
+                    Identifier::from(ident_str!("fixed_point64")),
+                ),
+                func_name: ident_str!("create_from_raw_value"),
+            },
+        ),
     ]
     .into_iter()
     .map(|(s, validator)| (s.to_string(), validator))
@@ -381,6 +408,9 @@ fn validate_and_construct(
         };
         // short cut for the utf8 constructor, which is a special case
         let len = get_len(cursor)?;
+        if len > 1000 {
+            return Err(VMStatus::error(StatusCode::FAILED_TO_DESERIALIZE_ARGUMENT, None));
+        }
         let mut arg = vec![];
         read_n_bytes(len, cursor, &mut arg)?;
         std::str::from_utf8(&arg).map_err(|_| constructor_error())?;
