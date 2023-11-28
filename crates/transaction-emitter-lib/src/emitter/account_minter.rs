@@ -21,8 +21,11 @@ use core::{
     result::Result::{Err, Ok},
 };
 use futures::StreamExt;
-use rand::{rngs::StdRng, SeedableRng};
-use std::{path::Path, time::Instant};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug)]
 pub struct AccountMinter<'t> {
@@ -128,14 +131,17 @@ impl<'t> AccountMinter<'t> {
             .get_account_balance(self.source_account.address())
             .await?;
         if req.mint_to_root {
-            if balance.checked_add(coins_for_source).is_some() {
+            // Check against more than coins_for_source, because we can have multiple txn emitter running simultaneously
+            if balance < coins_for_source.checked_mul(100).unwrap_or(u64::MAX / 2) {
                 info!(
-                    "Mint account {} current balance is {}, minting additional {} coins",
+                    "Mint account {} current balance is {}, needing {}, minting to refil it fully",
                     self.source_account.address(),
                     balance,
                     coins_for_source,
                 );
-                self.mint_to_root(txn_executor, coins_for_source).await?;
+                // Mint to refil the balance, to reduce number of mints
+                self.mint_to_root(txn_executor, u64::MAX - balance - 1)
+                    .await?;
             } else {
                 info!(
                     "Mint account {} current balance is {}, needing {}. Proceeding without minting, as balance would overflow otherwise",
@@ -283,8 +289,22 @@ impl<'t> AccountMinter<'t> {
             .sign_with_transaction_builder(self.txn_factory.payload(
                 aptos_stdlib::aptos_coin_mint(self.source_account.address(), amount),
             ));
-        txn_executor.execute_transactions(&[txn]).await?;
-        Ok(())
+
+        if let Err(e) = txn_executor.execute_transactions(&[txn]).await {
+            // This cannot work simultaneously across different txn emitters,
+            // so check on failure if another emitter has refilled it instead
+
+            let balance = txn_executor
+                .get_account_balance(self.source_account.address())
+                .await?;
+            if balance > u64::MAX / 2 {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn create_and_fund_seed_accounts(
@@ -362,7 +382,8 @@ impl<'t> AccountMinter<'t> {
         txn_executor: &dyn ReliableTransactionSubmitter,
         coins_for_source: u64,
     ) -> Result<LocalAccount> {
-        for i in 0..3 {
+        const NUM_TRIES: usize = 3;
+        for i in 0..NUM_TRIES {
             self.source_account.set_sequence_number(
                 txn_executor
                     .query_sequence_number(self.source_account.address())
@@ -380,8 +401,18 @@ impl<'t> AccountMinter<'t> {
                 error!(
                     "Couldn't create new source account, {:?}, try {}, retrying",
                     e, i
-                )
+                );
+                // random sleep to coordinate with other instances
+                if i + 1 < NUM_TRIES {
+                    let sleep_secs = rand::thread_rng().gen_range(0, 10);
+                    tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+                }
             } else {
+                new_source_account.set_sequence_number(
+                    txn_executor
+                        .query_sequence_number(new_source_account.address())
+                        .await?,
+                );
                 info!(
                     "New source account created {}",
                     new_source_account.address()

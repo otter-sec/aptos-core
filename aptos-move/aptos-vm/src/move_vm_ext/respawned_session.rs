@@ -40,9 +40,14 @@ use move_core_types::{
     vm_status::{err_msg, StatusCode, VMStatus},
 };
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
+
+fn unwrap_or_invariant_violation<T>(value: Option<T>, msg: &str) -> Result<T, VMStatus> {
+    value
+        .ok_or_else(|| VMStatus::error(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR, err_msg(msg)))
+}
 
 /// We finish the session after the user transaction is done running to get the change set and
 /// charge gas and storage fee based on it before running storage refunds and the transaction
@@ -77,14 +82,22 @@ impl<'r, 'l> RespawnedSession<'r, 'l> {
         Ok(RespawnedSessionBuilder {
             executor_view,
             resolver_builder: |executor_view| vm.as_move_resolver(executor_view),
-            session_builder: |resolver| Some(vm.0.new_session(resolver, session_id)),
+            session_builder: |resolver| Some(vm.vm_impl.new_session(resolver, session_id)),
             storage_refund,
         }
         .build())
     }
 
-    pub fn execute<R>(&mut self, fun: impl FnOnce(&mut SessionExt) -> R) -> R {
-        self.with_session_mut(|session| fun(session.as_mut().unwrap()))
+    pub fn execute<T>(
+        &mut self,
+        fun: impl FnOnce(&mut SessionExt) -> Result<T, VMStatus>,
+    ) -> Result<T, VMStatus> {
+        self.with_session_mut(|session| {
+            fun(unwrap_or_invariant_violation(
+                session.as_mut(),
+                "VM respawned session has to be set for execution.",
+            )?)
+        })
     }
 
     pub fn finish(
@@ -92,7 +105,12 @@ impl<'r, 'l> RespawnedSession<'r, 'l> {
         change_set_configs: &ChangeSetConfigs,
     ) -> Result<VMChangeSet, VMStatus> {
         let additional_change_set = self.with_session_mut(|session| {
-            session.take().unwrap().finish(&mut (), change_set_configs)
+            unwrap_or_invariant_violation(
+                session.take(),
+                "VM session cannot be finished more than once.",
+            )?
+            .finish(change_set_configs)
+            .map_err(|e| e.into_vm_status())
         })?;
         if additional_change_set.has_creation() {
             // After respawning, for example, in the epilogue, there shouldn't be new slots
@@ -122,6 +140,21 @@ impl<'r, 'l> RespawnedSession<'r, 'l> {
     pub fn get_storage_fee_refund(&self) -> Fee {
         *self.borrow_storage_refund()
     }
+}
+
+// Sporadically checks if the given two input type layouts match
+pub fn assert_layout_matches(
+    layout_1: Option<&MoveTypeLayout>,
+    layout_2: Option<&MoveTypeLayout>,
+) -> Result<(), PanicError> {
+    //TODO[agg_v2](optimize): Don't compare the layouts everytime. Do this operation sporadically
+    if layout_1 != layout_2 {
+        return Err(code_invariant_error(format!(
+            "Layouts don't match when they are expected to: {:?} and {:?}",
+            layout_1, layout_2
+        )));
+    }
+    Ok(())
 }
 
 /// Adapter to allow resolving the calls to `ExecutorView` via change set.
@@ -261,6 +294,15 @@ impl<'r> TDelayedFieldView for ExecutorViewWithChangeSet<'r> {
         self.base_executor_view
             .get_reads_needing_exchange(delayed_write_set_keys, skip)
     }
+
+    fn get_group_reads_needing_exchange(
+        &self,
+        delayed_write_set_keys: &HashSet<Self::Identifier>,
+        skip: &HashSet<Self::ResourceKey>,
+    ) -> Result<BTreeMap<Self::ResourceKey, (Self::ResourceValue, u64)>, PanicError> {
+        self.base_executor_view
+            .get_group_reads_needing_exchange(delayed_write_set_keys, skip)
+    }
 }
 
 impl<'r> TResourceView for ExecutorViewWithChangeSet<'r> {
@@ -297,13 +339,15 @@ impl<'r> TResourceGroupView for ExecutorViewWithChangeSet<'r> {
         resource_tag: &Self::ResourceTag,
         maybe_layout: Option<&Self::Layout>,
     ) -> anyhow::Result<Option<Bytes>> {
-        // TODO: resource_group_write_set also contains a layout. What to do with it?
-        if let Some((write_op, _layout)) = self
+        if let Some((write_op, layout)) = self
             .change_set
             .resource_group_write_set()
             .get(group_key)
             .and_then(|g| g.inner_ops().get(resource_tag))
         {
+            assert_layout_matches(maybe_layout, layout.as_deref())
+                .map_err(|e| anyhow::anyhow!("get_resource_from_group layout check: {:?}", e))?;
+
             Ok(write_op.extract_raw_bytes())
         } else {
             self.base_resource_group_view.get_resource_from_group(
@@ -312,6 +356,12 @@ impl<'r> TResourceGroupView for ExecutorViewWithChangeSet<'r> {
                 maybe_layout,
             )
         }
+    }
+
+    fn release_group_cache(
+        &self,
+    ) -> Option<HashMap<Self::GroupKey, BTreeMap<Self::ResourceTag, Bytes>>> {
+        unreachable!("Must not be called by RespawnedSession finish");
     }
 }
 
@@ -467,8 +517,7 @@ mod test {
                 key("resource_group_both"),
                 GroupWrite::new(
                     WriteOp::Deletion,
-                    0,
-                    BTreeMap::from([
+                    vec![
                         (
                             mock_tag_0(),
                             (WriteOp::Modification(serialize(&1000).into()), None),
@@ -477,18 +526,19 @@ mod test {
                             mock_tag_2(),
                             (WriteOp::Modification(serialize(&300).into()), None),
                         ),
-                    ]),
+                    ],
+                    0,
                 ),
             ),
             (
                 key("resource_group_write_set"),
                 GroupWrite::new(
                     WriteOp::Deletion,
-                    0,
-                    BTreeMap::from([(
+                    vec![(
                         mock_tag_1(),
                         (WriteOp::Modification(serialize(&5000).into()), None),
-                    )]),
+                    )],
+                    0,
                 ),
             ),
         ]);
@@ -499,6 +549,7 @@ mod test {
             module_write_set,
             aggregator_v1_write_set,
             aggregator_v1_delta_set,
+            BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
             vec![],

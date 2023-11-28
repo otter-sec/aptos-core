@@ -48,6 +48,7 @@ CDN
 Choco
 CLI
 CMake
+CoinFlipEvents
 CPU
 CPUs
 ChainID
@@ -126,6 +127,8 @@ EntryFunctionPayload
 Enums
 EpochChangeProof
 Ethereum
+EventHandle
+EventHandles
 ExtendRef
 ExternalMarkdown
 FA
@@ -241,6 +244,7 @@ Poelstra
 Pontem
 Postcondition
 Postgres
+postgresql
 PowerShell
 PropertyMap
 Prover
@@ -386,6 +390,7 @@ cli
 clippy
 cn
 codebase
+composability
 composable
 config
 configs
@@ -397,6 +402,7 @@ cryptographically
 cryptosystem
 cryptosystems
 crytographic
+customizability
 customizable
 dApp
 dApps
@@ -661,3 +667,4 @@ yaml
 yamls
 zkSNARK
 zksnark
+observability

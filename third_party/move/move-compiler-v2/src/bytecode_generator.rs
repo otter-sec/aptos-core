@@ -52,7 +52,8 @@ pub fn generate_bytecode(env: &GlobalEnv, fid: QualifiedId<FunId>) -> FunctionDa
         gen.results.push(temp)
     }
     gen.scopes.push(scope);
-    if let Some(def) = gen.func_env.get_def().cloned() {
+    let optional_def = gen.func_env.get_def().as_ref().cloned();
+    if let Some(def) = optional_def {
         let results = gen.results.clone();
         // Need to clone expression if present because of sharing issues with `gen`. However, because
         // of interning, clone is cheap.
@@ -139,6 +140,11 @@ impl<'env> Generator<'env> {
         self.func_env.module_env.env
     }
 
+    /// Shortcut to get type of a node.
+    fn get_node_type(&'env self, id: NodeId) -> Type {
+        self.env().get_node_type(id)
+    }
+
     /// Emit a bytecode.
     fn emit(&mut self, b: Bytecode) {
         self.code.push(b)
@@ -197,7 +203,7 @@ impl<'env> Generator<'env> {
             self.error(
                 id,
                 format!("cannot assign tuple type `{}` to single variable (use `(a, b, ..) = ..` instead)",
-                    ty.display(&self.env().get_type_display_ctx()))
+                        ty.display(&self.env().get_type_display_ctx()))
             )
         }
         let next_idx = self.temps.len();
@@ -252,7 +258,7 @@ impl<'env> Generator<'env> {
 
     /// Finds the temporary index assigned to the local.
     fn find_local(&self, id: NodeId, sym: Symbol) -> TempIndex {
-        for scope in &self.scopes {
+        for scope in self.scopes.iter().rev() {
             if let Some(idx) = scope.get(&sym) {
                 return *idx;
             }
@@ -299,7 +305,6 @@ impl<'env> Generator<'env> {
                     // Result is thrown away, but for typing reasons, we need to introduce
                     // temps to construct the step target.
                     let step_targets = self
-                        .env()
                         .get_node_type(step.node_id())
                         .flatten()
                         .into_iter()
@@ -318,7 +323,7 @@ impl<'env> Generator<'env> {
                 // Declare all variables bound by the pattern
                 let mut scope = BTreeMap::new();
                 for (id, sym) in pat.vars() {
-                    let ty = self.env().get_node_type(id);
+                    let ty = self.get_node_type(id);
                     let temp = self.new_temp_with_valid_type(id, ty);
                     scope.insert(sym, temp);
                 }
@@ -430,7 +435,7 @@ impl<'env> Generator<'env> {
 
     /// Convert a value from AST world into a constant as expected in bytecode.
     fn to_constant(&self, id: NodeId, val: &Value) -> Constant {
-        let ty = self.env().get_node_type(id);
+        let ty = self.get_node_type(id);
         match val {
             Value::Address(x) => Constant::Address(x.clone()),
             Value::Number(x) => match ty {
@@ -521,10 +526,25 @@ impl<'env> Generator<'env> {
                 self.gen_op_call(targets, id, BytecodeOperation::Pack(*mid, *sid, inst), args)
             },
             Operation::Select(mid, sid, fid) => {
-                let inst = self.env().get_node_instantiation(id);
                 let target = self.require_unary_target(id, targets);
                 let arg = self.require_unary_arg(id, args);
-                self.gen_select(target, id, mid.qualified_inst(*sid, inst), *fid, &arg)
+                // Get the instantiation of the struct. It is not contained in the select
+                // expression but in the type of it's operand.
+                if let Some((_, inst)) = self
+                    .get_node_type(arg.node_id())
+                    .skip_reference()
+                    .get_struct(self.env())
+                {
+                    self.gen_select(
+                        target,
+                        id,
+                        mid.qualified_inst(*sid, inst.to_vec()),
+                        *fid,
+                        &arg,
+                    )
+                } else {
+                    self.internal_error(id, "inconsistent type in select expression")
+                }
             },
             Operation::Exists(None) => {
                 let inst = self.env().get_node_instantiation(id);
@@ -601,6 +621,8 @@ impl<'env> Generator<'env> {
             Operation::Ge => self.gen_op_call(targets, id, BytecodeOperation::Ge, args),
             Operation::Not => self.gen_op_call(targets, id, BytecodeOperation::Not, args),
 
+            Operation::NoOp => {}, // do nothing
+
             // Non-supported specification related operations
             Operation::Exists(Some(_))
             | Operation::SpecFunction(_, _, _)
@@ -645,8 +667,7 @@ impl<'env> Generator<'env> {
             | Operation::EmptyEventStore
             | Operation::ExtendEventStore
             | Operation::EventStoreIncludes
-            | Operation::EventStoreIncludedIn
-            | Operation::NoOp => self.internal_error(
+            | Operation::EventStoreIncludedIn => self.internal_error(
                 id,
                 format!("unsupported specification construct: `{:?}`", op),
             ),
@@ -654,7 +675,7 @@ impl<'env> Generator<'env> {
     }
 
     fn gen_cast_call(&mut self, targets: Vec<TempIndex>, id: NodeId, args: &[Exp]) {
-        let ty = self.env().get_node_type(id);
+        let ty = self.get_node_type(id);
         let bytecode_op = match ty {
             Type::Primitive(PrimitiveType::U8) => BytecodeOperation::CastU8,
             Type::Primitive(PrimitiveType::U16) => BytecodeOperation::CastU16,
@@ -763,7 +784,7 @@ impl<'env> Generator<'env> {
     /// for `&mut` to `&` conversion, in which case we need to to introduce a Freeze operation.
     fn maybe_convert(&self, exp: &Exp, expected_ty: &Type) -> Exp {
         let id = exp.node_id();
-        let exp_ty = self.env().get_node_type(id);
+        let exp_ty = self.get_node_type(id);
         if let (
             Type::Reference(ReferenceKind::Mutable, _),
             Type::Reference(ReferenceKind::Immutable, et),
@@ -788,14 +809,11 @@ impl<'env> Generator<'env> {
         match exp.as_ref() {
             ExpData::Temporary(_, temp) => *temp,
             ExpData::LocalVar(id, sym) => self.find_local(*id, *sym),
-            ExpData::Call(_, Operation::Select(..), _) if self.reference_mode() => {
+            ExpData::Call(id, Operation::Select(..), _) if self.reference_mode() => {
                 // In reference mode, a selection is interpreted as selecting a reference to the
                 // field.
-                let id = exp.node_id();
-                let ty = Type::Reference(
-                    self.reference_mode_kind,
-                    Box::new(self.env().get_node_type(id)),
-                );
+                let ty =
+                    Type::Reference(self.reference_mode_kind, Box::new(self.get_node_type(*id)));
                 let temp = self.new_temp(ty);
                 self.gen(vec![temp], exp);
                 temp
@@ -803,7 +821,7 @@ impl<'env> Generator<'env> {
             _ => {
                 // Otherwise, introduce a temporary
                 let id = exp.node_id();
-                let ty = self.env().get_node_type(id);
+                let ty = self.get_node_type(id);
                 let temp = self.new_temp(ty);
                 self.gen(vec![temp], exp);
                 temp
@@ -844,10 +862,10 @@ impl<'env> Generator<'env> {
 impl<'env> Generator<'env> {
     fn gen_borrow(&mut self, target: TempIndex, id: NodeId, kind: ReferenceKind, arg: &Exp) {
         match arg.as_ref() {
-            ExpData::Call(_arg_id, Operation::Select(mid, sid, fid), args) => {
+            ExpData::Call(arg_id, Operation::Select(mid, sid, fid), args) => {
                 return self.gen_borrow_field(
                     target,
-                    id,
+                    *arg_id,
                     kind,
                     mid.qualified(*sid),
                     *fid,
@@ -858,20 +876,11 @@ impl<'env> Generator<'env> {
             ExpData::Temporary(_arg_id, temp) => return self.gen_borrow_temp(target, id, *temp),
             _ => {},
         }
-        if kind == ReferenceKind::Mutable {
-            // Operand is neither field selection nor local. We can take an immutable reference
-            // of such anonymous (stack) locations, but cannot mutate them.
-            self.error(
-                arg.node_id(),
-                "operand to `&mut` must be a field selection (`&mut s.f`) or a local (`&mut name`)",
-            );
-        } else {
-            // Borrow the temporary, allowing to do e.g. `&(1+2)`. Note to match
-            // this capability in the stack machine, we need to keep those temps in locals
-            // and can't manage them on the stack during stackification.
-            let temp = self.gen_arg(arg);
-            self.gen_borrow_temp(target, id, temp)
-        }
+        // Borrow the temporary, allowing to do e.g. `&(1+2)`. Note to match
+        // this capability in the stack machine, we need to keep those temps in locals
+        // and can't manage them on the stack during stackification.
+        let temp = self.gen_arg(arg);
+        self.gen_borrow_temp(target, id, temp)
     }
 
     fn gen_borrow_local(&mut self, target: TempIndex, id: NodeId, name: Symbol) {
@@ -886,51 +895,38 @@ impl<'env> Generator<'env> {
         &mut self,
         target: TempIndex,
         id: NodeId,
-        kind: ReferenceKind,
+        _kind: ReferenceKind,
         struct_id: QualifiedId<StructId>,
         field_id: FieldId,
         oper: &Exp,
     ) {
-        let (field_name, field_offset) = {
+        let field_offset = {
             let struct_env = self.env().get_struct(struct_id);
             let field_env = struct_env.get_field(field_id);
-            (field_env.get_name(), field_env.get_offset())
+            field_env.get_offset()
         };
         let temp = self.gen_arg(oper);
-        match kind {
-            ReferenceKind::Mutable => {
-                // Either the operand is a &mut, or a declared location
-                // which is not a reference
-                let ty = self.temp_type(temp);
-                if !(ty.is_mutable_reference()
-                    || matches!(
-                        oper.as_ref(),
-                        ExpData::LocalVar(..) | ExpData::Temporary(..)
-                    ) && !ty.is_reference())
-                {
-                    let struct_name = self.env().get_struct(struct_id).get_full_name_str();
-                    self.error(
-                        oper.node_id(),
-                        format!(
-                            "operand to `&mut _.{}` must have type `&mut {}` or be a local of type `{}`",
-                            field_name.display(self.env().symbol_pool()),
-                            struct_name,
-                            struct_name
-                        ),
-                    )
-                }
-            },
-            ReferenceKind::Immutable => {
-                // Currently no conditions for immutable, so we do allow `&fun().field`.
-            },
+        // Get instantiation of field. It is not contained in the select expression but in the
+        // type of its operand.
+        if let Some((_, inst)) = self
+            .get_node_type(oper.node_id())
+            .skip_reference()
+            .get_struct(self.env())
+        {
+            self.emit_call(
+                id,
+                vec![target],
+                BytecodeOperation::BorrowField(
+                    struct_id.module_id,
+                    struct_id.id,
+                    inst.to_vec(),
+                    field_offset,
+                ),
+                vec![temp],
+            );
+        } else {
+            self.internal_error(id, "inconsistent type in select expression")
         }
-        let inst = self.env().get_node_instantiation(id);
-        self.emit_call(
-            id,
-            vec![target],
-            BytecodeOperation::BorrowField(struct_id.module_id, struct_id.id, inst, field_offset),
-            vec![temp],
-        );
     }
 }
 
@@ -1036,18 +1032,14 @@ impl<'env> Generator<'env> {
                     }
                 }
             },
-            ExpData::Call(id, Operation::MoveFunction(mid, fid), args) => {
-                // The type checker has ensured that this function returns a tuple
+            _ => {
+                // The type checker has ensured that this expression represents  tuple
                 let (temps, cont_assigns) = self.flatten_patterns(pats, next_scope);
-                self.gen_function_call(temps, *id, mid.qualified(*fid), args);
+                self.gen(temps, exp);
                 for (cont_id, cont_pat, cont_temp) in cont_assigns {
                     self.gen_assign_from_temp(cont_id, &cont_pat, cont_temp, next_scope)
                 }
             },
-            _ => self.error(
-                id,
-                "assignment to tuple must be tuple itself or a function call",
-            ),
         }
     }
 
@@ -1100,7 +1092,7 @@ impl<'env> Generator<'env> {
             Pattern::Wildcard(id) => {
                 // Wildcard pattern: we need to create a temporary to receive the value, even
                 // if its dropped afterwards.
-                let temp = self.new_temp(self.env().get_node_type(*id));
+                let temp = self.new_temp(self.get_node_type(*id));
                 (temp, None)
             },
             Pattern::Var(id, sym) => {
@@ -1112,7 +1104,7 @@ impl<'env> Generator<'env> {
                 // Pattern is not flat: create a new temporary and an Assignment of this
                 // temporary to the pattern.
                 let id = pat.node_id();
-                let ty = self.env().get_node_type(id);
+                let ty = self.get_node_type(id);
                 let temp = self.new_temp_with_valid_type(id, ty);
                 (temp, Some((id, pat.clone(), temp)))
             },

@@ -30,6 +30,7 @@ aptos-types = { workspace = true }
 aptos-vm = { workspace = true, features = ["testing"] }
 aptos-vm-genesis = { workspace = true }
 bcs = { workspace = true }
+claims = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
 move-binary-format = { workspace = true }
@@ -45,6 +46,7 @@ serde = { workspace = true }
 tempfile = { workspace = true }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 dearbitrary = { version = "1.0.2", features = ["derive"] }
+test-case = { workspace = true }
 
 [dev-dependencies]
 claims = { workspace = true }
