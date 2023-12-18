@@ -577,17 +577,24 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
     /// them into the environment. Returns a vector for representing them in the target AST.
     pub fn analyze_and_add_type_params<'a, I>(&mut self, type_params: I) -> Vec<TypeParameter>
     where
-        I: IntoIterator<Item = (&'a Name, &'a EA::AbilitySet)>,
+        I: IntoIterator<Item = (&'a Name, &'a EA::AbilitySet, bool)>,
     {
         type_params
             .into_iter()
             .enumerate()
-            .map(|(i, (n, a))| {
+            .map(|(i, (n, a, is_phantom))| {
                 let ty = Type::new_param(i);
                 let sym = self.symbol_pool().make(n.value.as_str());
                 let abilities = self.parent.translate_abilities(a);
                 self.define_type_param(&self.to_loc(&n.loc), sym, ty, true /*report_errors*/);
-                TypeParameter(sym, TypeParameterKind::new(abilities))
+                TypeParameter(
+                    sym,
+                    if is_phantom {
+                        TypeParameterKind::new_phantom(abilities)
+                    } else {
+                        TypeParameterKind::new(abilities)
+                    },
+                )
             })
             .collect_vec()
     }
@@ -1013,7 +1020,7 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
                 // Construct an expansion name exp for regular type check
                 let maccess = sp(name.loc, EA::ModuleAccess_::Name(*name));
                 self.translate_name(
-                    &self.to_loc(&name.loc),
+                    &self.to_loc(&maccess.loc),
                     &maccess,
                     None,
                     &Type::new_prim(PrimitiveType::Address),
@@ -1100,12 +1107,32 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
                     self.new_error_exp()
                 }
             },
-            EA::Exp_::Name(maccess, type_params) => {
-                self.translate_name(&loc, maccess, type_params.as_deref(), expected_type)
-            },
+            EA::Exp_::Name(maccess, type_params) => self.translate_name(
+                &self.to_loc(&maccess.loc),
+                maccess,
+                type_params.as_deref(),
+                expected_type,
+            ),
             EA::Exp_::Move(var) | EA::Exp_::Copy(var) => {
                 let fake_access = sp(var.loc(), EA::ModuleAccess_::Name(var.0));
-                self.translate_name(&loc, &fake_access, None, expected_type)
+                let name_exp = self
+                    .translate_name(
+                        &self.to_loc(&fake_access.loc),
+                        &fake_access,
+                        None,
+                        expected_type,
+                    )
+                    .into_exp();
+                let id = self.new_node_id_with_type_loc(expected_type, &loc);
+                ExpData::Call(
+                    id,
+                    if matches!(&exp.value, EA::Exp_::Copy(_)) {
+                        Operation::Copy
+                    } else {
+                        Operation::Move
+                    },
+                    vec![name_exp],
+                )
             },
             EA::Exp_::Vector(loc, ty_opt, exps) => {
                 let loc = self.to_loc(loc);
@@ -1341,10 +1368,6 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
                 let id = self.new_node_id_with_type_loc(expected_type, &loc);
                 ExpData::Call(id, Operation::Deref, vec![target_exp.into_exp()])
             },
-            EA::Exp_::Borrow(_, exp) if self.mode == ExpTranslationMode::TryImplAsSpec => {
-                // Skipp borrow when interpreting as specification expression.
-                self.translate_exp(exp, expected_type)
-            },
             EA::Exp_::Borrow(mutable, exp) => {
                 self.require_impl_language(&loc);
                 let ref_kind = ReferenceKind::from_is_mut(*mutable);
@@ -1431,15 +1454,21 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
         locals
     }
 
-    /// Post processes any placeholders which have been generated while translating expressions
+    /// This method:
+    /// 1) Post processes any placeholders which have been generated while translating expressions
     /// with this builder. This rewrites the given result expression and fills in placeholders
     /// with the final expressions.
-    pub fn post_process_placeholders(&mut self, result_exp: Exp) -> Exp {
-        if self.placeholder_map.is_empty() {
-            // Shortcut case of no placeholders
-            result_exp
-        } else {
-            ExpData::rewrite(result_exp, &mut |e| {
+    /// 2) Instantiates types for all all struct patterns in the block expression
+    /// This step is necessary because struct pattern may contain uninstantiated variable types
+    pub fn post_process_body(&mut self, result_exp: Exp) -> Exp {
+        let subs = self.subs.clone();
+        ExpData::rewrite_exp_and_pattern(
+            result_exp,
+            &mut |e| {
+                if self.placeholder_map.is_empty() {
+                    // Shortcut case of no placeholders
+                    return Err(e);
+                }
                 let exp_data: ExpData = e.into();
                 if let ExpData::Call(id, Operation::NoOp, args) = exp_data {
                     if let Some(info) = self.placeholder_map.get(&id) {
@@ -1495,8 +1524,22 @@ impl<'env, 'translator, 'module_translator> ExpTranslator<'env, 'translator, 'mo
                 } else {
                     Err(exp_data.into_exp())
                 }
-            })
-        }
+            },
+            &mut |pat, _entering_scope| match pat {
+                Pattern::Struct(sid, std, patterns) => {
+                    let mut new_inst = vec![];
+                    for ty in &std.inst {
+                        let nty = subs.specialize(ty);
+                        new_inst.push(nty);
+                    }
+                    let mut new_std = std.clone();
+                    new_std.inst = new_inst;
+                    let new_pat = Pattern::Struct(*sid, new_std.clone(), patterns.clone());
+                    Some(new_pat)
+                },
+                _ => None,
+            },
+        )
     }
 
     /// Translates a specification block embedded in an expression context, represented by

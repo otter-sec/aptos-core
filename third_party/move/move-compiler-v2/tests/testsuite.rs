@@ -9,7 +9,10 @@ use move_compiler::compiled_unit::CompiledUnit;
 use move_compiler_v2::{
     inliner,
     pipeline::{
-        livevar_analysis_processor::LiveVarAnalysisProcessor, visibility_checker::VisibilityChecker,
+        ability_checker::AbilityChecker, explicit_drop::ExplicitDrop,
+        livevar_analysis_processor::LiveVarAnalysisProcessor,
+        reference_safety_processor::ReferenceSafetyProcessor,
+        visibility_checker::VisibilityChecker,
     },
     run_file_format_gen, Options,
 };
@@ -61,32 +64,56 @@ fn test_runner(path: &Path) -> datatest_stable::Result<()> {
 
     // For each experiment, run the test at `path`.
     for experiment in experiments {
-        // Construct options, compiler and collect output.
-        let options = Options {
+        let mut options = Options {
             testing: true,
             sources: sources.clone(),
             dependencies: deps.clone(),
             named_address_mapping: vec!["std=0x1".to_string()],
             ..Options::default()
         };
-        TestConfig::get_config_from_path(path).run(path, experiment, options)?
+        TestConfig::get_config_from_path(path, &mut options).run(path, experiment, options)?
     }
     Ok(())
 }
 
 impl TestConfig {
-    fn get_config_from_path(path: &Path) -> TestConfig {
+    fn get_config_from_path(path: &Path, options: &mut Options) -> TestConfig {
+        // Construct options, compiler and collect output.
         let path = path.to_string_lossy();
+        let verbose = cfg!(feature = "verbose-debug-print");
         let mut pipeline = FunctionTargetPipeline::default();
-        if path.contains("/checking/inlining/") {
+        if path.contains("/inlining/bug_") {
             pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
             pipeline.add_processor(Box::new(VisibilityChecker {}));
+            pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
             Self {
                 type_check_only: false,
                 dump_ast: true,
                 pipeline,
                 generate_file_format: false,
-                dump_annotated_targets: false,
+                dump_annotated_targets: true,
+            }
+        } else if path.contains("/inlining/") || path.contains("/folding/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            pipeline.add_processor(Box::new(VisibilityChecker {}));
+            pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
+            Self {
+                type_check_only: false,
+                dump_ast: true,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: verbose,
+            }
+        } else if path.contains("/unit_test/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            pipeline.add_processor(Box::new(VisibilityChecker {}));
+            options.testing = true;
+            Self {
+                type_check_only: false,
+                dump_ast: true,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: verbose,
             }
         } else if path.contains("/checking/") {
             Self {
@@ -94,7 +121,7 @@ impl TestConfig {
                 dump_ast: true,
                 pipeline,
                 generate_file_format: false,
-                dump_annotated_targets: false,
+                dump_annotated_targets: verbose,
             }
         } else if path.contains("/bytecode-generator/") {
             Self {
@@ -120,7 +147,49 @@ impl TestConfig {
                 dump_ast: false,
                 pipeline,
                 generate_file_format: false,
-                dump_annotated_targets: false,
+                dump_annotated_targets: verbose,
+            }
+        } else if path.contains("/live-var/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            Self {
+                type_check_only: false,
+                dump_ast: false,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: true,
+            }
+        } else if path.contains("/reference-safety/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
+            Self {
+                type_check_only: false,
+                dump_ast: verbose,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: verbose,
+            }
+        } else if path.contains("/explicit-drop/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
+            pipeline.add_processor(Box::new(ExplicitDrop {}));
+            Self {
+                type_check_only: false,
+                dump_ast: verbose,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: true,
+            }
+        } else if path.contains("/ability-checker/") {
+            pipeline.add_processor(Box::new(LiveVarAnalysisProcessor {}));
+            pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
+            pipeline.add_processor(Box::new(ExplicitDrop {}));
+            pipeline.add_processor(Box::new(AbilityChecker {}));
+            Self {
+                type_check_only: false,
+                dump_ast: false,
+                pipeline,
+                generate_file_format: false,
+                dump_annotated_targets: true,
             }
         } else {
             panic!(
@@ -234,7 +303,8 @@ impl TestConfig {
 
     /// Callback from the framework to register formatters for annotations.
     fn register_formatters(target: &FunctionTarget) {
-        LiveVarAnalysisProcessor::register_formatters(target)
+        LiveVarAnalysisProcessor::register_formatters(target);
+        ReferenceSafetyProcessor::register_formatters(target)
     }
 
     fn check_diags(baseline: &mut String, env: &GlobalEnv) -> bool {

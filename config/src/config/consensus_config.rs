@@ -4,7 +4,7 @@
 
 use crate::config::{
     config_sanitizer::ConfigSanitizer, node_config_loader::NodeType, Error, NodeConfig,
-    QuorumStoreConfig, SafetyRulesConfig,
+    QuorumStoreConfig, SafetyRulesConfig, BATCH_PADDING_BYTES,
 };
 use aptos_types::chain_id::ChainId;
 use cfg_if::cfg_if;
@@ -66,6 +66,11 @@ pub struct ConsensusConfig {
     pub window_for_chain_health: usize,
     pub chain_health_backoff: Vec<ChainHealthBackoffValues>,
     pub qc_aggregator_type: QcAggregatorType,
+    // Max blocks allowed for block retrieval requests
+    pub max_blocks_per_sending_request: u64,
+    pub max_blocks_per_sending_request_quorum_store_override: u64,
+    pub max_blocks_per_receiving_request: u64,
+    pub max_blocks_per_receiving_request_quorum_store_override: u64,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -197,7 +202,7 @@ impl Default for ConsensusConfig {
                 PipelineBackpressureValues {
                     back_pressure_pipeline_latency_limit_ms: 2500,
                     max_sending_block_txns_override: 2000,
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backpressure_proposal_delay_ms: 300,
                 },
                 PipelineBackpressureValues {
@@ -208,7 +213,7 @@ impl Default for ConsensusConfig {
                     // instead rely on max gas per block to limit latency
                     max_sending_block_txns_override: 500,
                     // stop reducing size, so 1MB transactions can still go through
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backpressure_proposal_delay_ms: 300,
                 },
             ],
@@ -223,20 +228,20 @@ impl Default for ConsensusConfig {
                 ChainHealthBackoffValues {
                     backoff_if_below_participating_voting_power_percentage: 77,
                     max_sending_block_txns_override: 2000,
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backoff_proposal_delay_ms: 300,
                 },
                 ChainHealthBackoffValues {
                     backoff_if_below_participating_voting_power_percentage: 75,
                     max_sending_block_txns_override: 1000,
                     // stop reducing size, so 1MB transactions can still go through
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backoff_proposal_delay_ms: 300,
                 },
                 ChainHealthBackoffValues {
                     backoff_if_below_participating_voting_power_percentage: 72,
                     max_sending_block_txns_override: 500,
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backoff_proposal_delay_ms: 300,
                 },
                 ChainHealthBackoffValues {
@@ -246,12 +251,18 @@ impl Default for ConsensusConfig {
                     // For transactions that are more expensive than that, we should
                     // instead rely on max gas per block to limit latency
                     max_sending_block_txns_override: 250,
-                    max_sending_block_bytes_override: 1024 * 1024,
+                    max_sending_block_bytes_override: 1024 * 1024 + BATCH_PADDING_BYTES as u64,
                     backoff_proposal_delay_ms: 300,
                 },
             ],
 
             qc_aggregator_type: QcAggregatorType::default(),
+            // This needs to fit into the network message size, so with quorum store it can be much bigger
+            max_blocks_per_sending_request: 10,
+            // TODO: this is for release compatibility, after release we can configure it to match the receiving max
+            max_blocks_per_sending_request_quorum_store_override: 10,
+            max_blocks_per_receiving_request: 10,
+            max_blocks_per_receiving_request_quorum_store_override: 100,
         }
     }
 }
@@ -259,6 +270,22 @@ impl Default for ConsensusConfig {
 impl ConsensusConfig {
     pub fn set_data_dir(&mut self, data_dir: PathBuf) {
         self.safety_rules.set_data_dir(data_dir);
+    }
+
+    pub fn max_blocks_per_sending_request(&self, quorum_store_enabled: bool) -> u64 {
+        if quorum_store_enabled {
+            self.max_blocks_per_sending_request_quorum_store_override
+        } else {
+            self.max_blocks_per_sending_request
+        }
+    }
+
+    pub fn max_blocks_per_receiving_request(&self, quorum_store_enabled: bool) -> u64 {
+        if quorum_store_enabled {
+            self.max_blocks_per_receiving_request_quorum_store_override
+        } else {
+            self.max_blocks_per_receiving_request
+        }
     }
 
     pub fn max_sending_block_txns(&self, quorum_store_enabled: bool) -> u64 {

@@ -2,9 +2,12 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::file_format_generator::{
-    module_generator::{ModuleContext, ModuleGenerator},
-    MAX_FUNCTION_DEF_COUNT, MAX_LOCAL_COUNT,
+use crate::{
+    file_format_generator::{
+        module_generator::{ModuleContext, ModuleGenerator},
+        MAX_FUNCTION_DEF_COUNT, MAX_LOCAL_COUNT,
+    },
+    pipeline::livevar_analysis_processor::LiveVarAnnotation,
 };
 use move_binary_format::file_format as FF;
 use move_model::{
@@ -15,8 +18,7 @@ use move_model::{
 use move_stackless_bytecode::{
     function_target::FunctionTarget,
     function_target_pipeline::FunctionVariant,
-    livevar_analysis::LiveVarAnnotation,
-    stackless_bytecode::{Bytecode, Constant, Label, Operation},
+    stackless_bytecode::{AssignKind, Bytecode, Constant, Label, Operation},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -217,8 +219,8 @@ impl<'a> FunctionGenerator<'a> {
     /// for peephole optimizations.
     fn gen_bytecode(&mut self, ctx: &BytecodeContext, bc: &Bytecode, next_bc: Option<&Bytecode>) {
         match bc {
-            Bytecode::Assign(_, dest, source, _mode) => {
-                self.abstract_push_args(ctx, vec![*source]);
+            Bytecode::Assign(_, dest, source, mode) => {
+                self.abstract_push_args(ctx, vec![*source], Some(mode));
                 let local = self.temp_to_local(ctx.fun_ctx, *dest);
                 self.emit(FF::Bytecode::StLoc(local));
                 self.abstract_pop(ctx)
@@ -296,12 +298,12 @@ impl<'a> FunctionGenerator<'a> {
     ) {
         let result = result.as_ref();
         // First ensure the arguments are on the stack.
-        self.abstract_push_args(ctx, result);
+        self.abstract_push_args(ctx, result, None);
         if self.stack.len() != result.len() {
             // Unfortunately, there is more on the stack than needed.
             // Need to flush and push again so the stack is empty after return.
             self.abstract_flush_stack_before(ctx, 0);
-            self.abstract_push_args(ctx, result.as_ref());
+            self.abstract_push_args(ctx, result.as_ref(), None);
             assert_eq!(self.stack.len(), result.len())
         }
     }
@@ -514,7 +516,7 @@ impl<'a> FunctionGenerator<'a> {
         source: &[TempIndex],
     ) {
         let fun_ctx = ctx.fun_ctx;
-        self.abstract_push_args(ctx, source);
+        self.abstract_push_args(ctx, source, None);
         if let Some(opcode) = ctx.fun_ctx.module.get_well_known_function_code(
             &ctx.fun_ctx.loc,
             id,
@@ -558,7 +560,7 @@ impl<'a> FunctionGenerator<'a> {
         mk_generic: impl FnOnce(FF::StructDefInstantiationIndex) -> FF::Bytecode,
     ) {
         let fun_ctx = ctx.fun_ctx;
-        self.abstract_push_args(ctx, source);
+        self.abstract_push_args(ctx, source, None);
         let struct_env = &fun_ctx.module.env.get_struct(id);
         if inst.is_empty() {
             let idx = self
@@ -589,7 +591,7 @@ impl<'a> FunctionGenerator<'a> {
         source: &[TempIndex],
     ) {
         let fun_ctx = ctx.fun_ctx;
-        self.abstract_push_args(ctx, source);
+        self.abstract_push_args(ctx, source, None);
         let struct_env = &fun_ctx.module.env.get_struct(id);
         let field_env = &struct_env.get_field_by_offset(offset);
         let is_mut = fun_ctx.fun.get_local_type(dest[0]).is_mutable_reference();
@@ -624,7 +626,7 @@ impl<'a> FunctionGenerator<'a> {
         bc: FF::Bytecode,
         source: &[TempIndex],
     ) {
-        self.abstract_push_args(ctx, source);
+        self.abstract_push_args(ctx, source, None);
         self.emit(bc);
         self.abstract_pop_n(ctx, source.len());
         self.abstract_push_result(ctx, dest)
@@ -670,7 +672,12 @@ impl<'a> FunctionGenerator<'a> {
     /// Ensure that on the abstract stack of the generator, the given temporaries are ready,
     /// in order, to be consumed. Ideally those are already on the stack, but if they are not,
     /// they will be made available.
-    fn abstract_push_args(&mut self, ctx: &BytecodeContext, temps: impl AsRef<[TempIndex]>) {
+    fn abstract_push_args(
+        &mut self,
+        ctx: &BytecodeContext,
+        temps: impl AsRef<[TempIndex]>,
+        push_kind: Option<&AssignKind>,
+    ) {
         let fun_ctx = ctx.fun_ctx;
         // Compute the maximal prefix of `temps` which are already on the stack.
         let temps = temps.as_ref();
@@ -701,11 +708,25 @@ impl<'a> FunctionGenerator<'a> {
         // Finally, push `temps_to_push` onto the stack.
         for temp in temps_to_push {
             let local = self.temp_to_local(fun_ctx, *temp);
-            // Copy the temporary if it is copyable or still used after this code point.
-            if fun_ctx.is_copyable(*temp) && ctx.is_alive_after(*temp) {
-                self.emit(FF::Bytecode::CopyLoc(local))
-            } else {
-                self.emit(FF::Bytecode::MoveLoc(local));
+            match push_kind {
+                Some(AssignKind::Move) => {
+                    self.emit(FF::Bytecode::MoveLoc(local));
+                },
+                Some(AssignKind::Copy) => {
+                    self.emit(FF::Bytecode::CopyLoc(local));
+                },
+                Some(AssignKind::Inferred) | Some(AssignKind::Store) => {
+                    fun_ctx
+                        .internal_error("Inferred and Store AssignKind should be not appear here.");
+                },
+                None => {
+                    // Copy the temporary if it is copyable and still used after this code point.
+                    if fun_ctx.is_copyable(*temp) && ctx.is_alive_after(*temp) {
+                        self.emit(FF::Bytecode::CopyLoc(local))
+                    } else {
+                        self.emit(FF::Bytecode::MoveLoc(local));
+                    }
+                },
             }
             self.stack.push(*temp)
         }
@@ -824,7 +845,7 @@ impl<'env> BytecodeContext<'env> {
             .get::<LiveVarAnnotation>()
             .expect("livevar analysis result");
         an.get_live_var_info_at(self.code_offset)
-            .map(|a| a.after.contains(&temp))
+            .map(|a| a.after.contains_key(&temp))
             .unwrap_or(false)
     }
 
@@ -838,7 +859,7 @@ impl<'env> BytecodeContext<'env> {
             .get::<LiveVarAnnotation>()
             .expect("livevar analysis result");
         an.get_live_var_info_at(self.code_offset)
-            .map(|a| a.before.contains(&temp))
+            .map(|a| a.before.contains_key(&temp))
             .unwrap_or(false)
     }
 }
