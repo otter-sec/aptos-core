@@ -1007,7 +1007,7 @@ pub fn verify_script(config: &VerifierConfig, script: &CompiledScript) -> VMResu
         verify_script_impl::<16>(script)
     } else {
         return Err(
-            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+            PartialVMError::new(StatusCode::RESERVED_VERIFICATION_ERROR_2)
                 .with_message("too many type parameters/arguments in the program".to_string())
                 .finish(Location::Undefined),
         );

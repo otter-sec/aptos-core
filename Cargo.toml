@@ -456,7 +456,7 @@ version-compare = "0.1.1"
 bitvec = "1.0.1"
 blake2 = "0.10.4"
 blake2-rfc = "0.2.18"
-blst = "0.3.7"
+blst = { version = "0.3.7", features = ["no-threads"] }
 bollard = "0.15"
 bulletproofs = { version = "4.0.0" }
 byteorder = "1.4.3"
