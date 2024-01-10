@@ -85,7 +85,7 @@ use std::{
     time::Instant,
 };
 
-use self::dumper::{ExecVariant, RunnableState, LAST_MODULES};
+use self::dumper::{ExecVariant, RunnableState, LAST_MODULES, UserAccount, FundAmount};
 
 static RNG_SEED: [u8; 32] = [9u8; 32];
 
@@ -159,7 +159,36 @@ pub mod dumper {
         }
     }
 
-    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub enum FundAmount {
+        Zero,
+        Poor,
+        Rich,
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub struct UserAccount {
+        pub is_inited_and_funded: bool,
+        pub fund: FundAmount,
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub enum Authenticator {
+        Ed25519 {
+            sender: UserAccount,
+        },
+        MultiAgent {
+            sender: UserAccount,
+            secondary_signers: Vec<UserAccount>,
+        },
+        FeePayer {
+            sender: UserAccount,
+            secondary_signers: Vec<UserAccount>,
+            fee_payer: UserAccount,
+        },
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
     pub enum ExecVariant {
         Script {
             script: CompiledScript,
@@ -174,10 +203,11 @@ pub mod dumper {
         },
     }
 
-    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
     pub struct RunnableState {
         pub dep_modules: Vec<CompiledModule>,
         pub exec_variant: ExecVariant,
+        pub tx_auth_type: Authenticator,
     }
 
     impl RunnableState {
@@ -611,11 +641,16 @@ impl FakeExecutor {
                                     type_args: ef.ty_args().to_vec(),
                                     args: ef.args().to_vec(),
                                 },
+                                tx_auth_type: dumper::Authenticator::Ed25519 {
+                                    sender: UserAccount {
+                                        is_inited_and_funded: true,
+                                        fund: FundAmount::Rich,
+                                    },
+                                },
                             };
                             rs.store(Path::new("./seeds_mvrs"));
                         }
                     }
-
                 }
             }
         }

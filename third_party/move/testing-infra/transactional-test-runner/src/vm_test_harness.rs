@@ -5,6 +5,7 @@
 use crate::{
     framework::{run_test_impl, CompiledState, MoveTestAdapter},
     tasks::{EmptyCommand, InitCommand, SyntaxChoice, TaskInput},
+    vm_test_harness::dumper::{FundAmount, UserAccount},
 };
 use anyhow::{anyhow, Result};
 use clap::Parser;
@@ -65,10 +66,12 @@ pub mod dumper {
         file_format::{CompiledScript, FunctionDefinitionIndex},
         CompiledModule,
     };
-    use move_core_types::{language_storage::{ModuleId, TypeTag}, value::MoveValue};
+    use move_core_types::{
+        language_storage::{ModuleId, TypeTag},
+        value::MoveValue,
+    };
     use sha2::{Digest, Sha256};
     use std::{io::Write, path::Path};
-
 
     #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
     pub struct RunnableScript {
@@ -95,7 +98,36 @@ pub mod dumper {
         }
     }
 
-    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub enum FundAmount {
+        Zero,
+        Poor,
+        Rich,
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub struct UserAccount {
+        pub is_inited_and_funded: bool,
+        pub fund: FundAmount,
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
+    pub enum Authenticator {
+        Ed25519 {
+            sender: UserAccount,
+        },
+        MultiAgent {
+            sender: UserAccount,
+            secondary_signers: Vec<UserAccount>,
+        },
+        FeePayer {
+            sender: UserAccount,
+            secondary_signers: Vec<UserAccount>,
+            fee_payer: UserAccount,
+        },
+    }
+
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
     pub enum ExecVariant {
         Script {
             script: CompiledScript,
@@ -110,10 +142,11 @@ pub mod dumper {
         },
     }
 
-    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq)]
+    #[derive(Debug, Arbitrary, Dearbitrary, Eq, PartialEq, Clone)]
     pub struct RunnableState {
         pub dep_modules: Vec<CompiledModule>,
         pub exec_variant: ExecVariant,
+        pub tx_auth_type: Authenticator,
     }
 
     impl RunnableState {
@@ -391,6 +424,12 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                     type_args: type_args.clone(),
                     args: txn_args.clone(),
                 },
+                tx_auth_type: dumper::Authenticator::Ed25519 {
+                    sender: UserAccount {
+                        is_inited_and_funded: true,
+                        fund: FundAmount::Rich,
+                    },
+                },
             };
             rs.store(Path::new("./seeds_mvrs"));
             let rs = RunnableScript {
@@ -472,6 +511,12 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                             function: FunctionDefinitionIndex(fdi as u16),
                             type_args: type_args.clone(),
                             args: args.clone(),
+                        },
+                        tx_auth_type: dumper::Authenticator::Ed25519 {
+                            sender: UserAccount {
+                                is_inited_and_funded: true,
+                                fund: FundAmount::Rich,
+                            },
                         },
                     };
                     rs.store(Path::new("./seeds_mvrs"));
