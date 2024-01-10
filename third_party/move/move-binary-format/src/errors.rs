@@ -395,7 +395,7 @@ impl PartialVMError {
 
     pub fn new(major_status: StatusCode) -> Self {
         debug_assert!(major_status != StatusCode::EXECUTED);
-        let message = if major_status == StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR {
+        let message = if major_status == StatusCode::VERIFIER_INVARIANT_VIOLATION {
             let mut len = 5;
             let mut trace: String = "Unknown invariant violation generated:\n".to_string();
             backtrace::trace(|frame| {
