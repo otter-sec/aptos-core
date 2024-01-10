@@ -93,7 +93,7 @@ owned.
 
 <table>
 <tr>
-<th>No.</th><th>Property</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
+<th>No.</th><th>Requirement</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
 </tr>
 
 <tr>
@@ -141,7 +141,7 @@ owned.
 
 
 
-<pre><code>// This enforces <a id="high-level-req-1" href="#high-level-req">high level requirement 1</a>:
+<pre><code>// This enforces <a id="high-level-req-1" href="#high-level-req">high-level requirement 1</a>:
 <b>aborts_if</b> [abstract] len(bytes) != 32;
 </code></pre>
 

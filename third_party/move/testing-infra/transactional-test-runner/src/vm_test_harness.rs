@@ -12,7 +12,7 @@ use clap::Parser;
 use move_binary_format::{
     access::ModuleAccess,
     compatibility::Compatibility,
-    errors::{Location, VMError, VMResult},
+    errors::{Location, VMError, VMResult, PartialVMError},
     file_format::{CompiledScript, FunctionDefinitionIndex},
     CompiledModule,
 };
@@ -169,7 +169,7 @@ pub mod dumper {
 }
 
 pub fn view_resource_in_move_storage(
-    storage: &impl MoveResolver,
+    storage: &impl MoveResolver<PartialVMError>,
     address: AccountAddress,
     module: &ModuleId,
     resource: &IdentStr,

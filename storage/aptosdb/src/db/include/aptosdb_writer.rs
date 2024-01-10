@@ -143,8 +143,8 @@ impl DbWriter for AptosDB {
             restore_utils::save_transactions(
                 self.ledger_store.clone(),
                 self.transaction_store.clone(),
-                self.event_store.clone(),
                 self.state_store.clone(),
+                self.ledger_db.clone(),
                 version,
                 &transactions,
                 &transaction_infos,
@@ -213,14 +213,19 @@ impl DbWriter for AptosDB {
         gauged_api("index_table_info", || {
             self.indexer_async_v2
                 .as_ref()
-                .map(|indexer| indexer.index_table_info(db_reader, first_version, write_sets, end_early_if_pending_on_empty))
+                .map(|indexer| {
+                    indexer.index_table_info(
+                        db_reader,
+                        first_version,
+                        write_sets,
+                        end_early_if_pending_on_empty,
+                    )
+                })
                 .unwrap_or(Ok(()))
         })
     }
 
-    fn cleanup_pending_on_items(
-        &self,
-    ) -> Result<()> {
+    fn cleanup_pending_on_items(&self) -> Result<()> {
         gauged_api("cleanup_pending_on_items", || {
             self.indexer_async_v2
                 .as_ref()
@@ -229,10 +234,7 @@ impl DbWriter for AptosDB {
         })
     }
 
-    fn update_next_version(
-        &self,
-        end_version: u64
-    ) -> Result<()> {
+    fn update_next_version(&self, end_version: u64) -> Result<()> {
         gauged_api("update_next_version", || {
             self.indexer_async_v2
                 .as_ref()
@@ -335,7 +337,9 @@ impl AptosDB {
                     .unwrap()
             });
             s.spawn(|_| {
-                self.commit_transactions(txns_to_commit, first_version, skip_index_and_usage)
+                self.ledger_db
+                    .transaction_db()
+                    .commit_transactions(txns_to_commit, first_version, skip_index_and_usage)
                     .unwrap()
             });
             s.spawn(|_| {
@@ -425,6 +429,8 @@ impl AptosDB {
                             ));
                             ledger_metadata_batch
                                 .put::<BlockInfoSchema>(&block_height, &block_info)?;
+                            ledger_metadata_batch
+                                .put::<BlockByVersionSchema>(&version, &block_height)?;
                         }
                     }
                 }
@@ -479,7 +485,7 @@ impl AptosDB {
             .with_min_len(optimal_min_len(num_txns, 128))
             .enumerate()
             .try_for_each(|(i, txn_to_commit)| -> Result<()> {
-                self.event_store.put_events(
+                self.ledger_db.event_db().put_events(
                     first_version + i as u64,
                     txn_to_commit.events(),
                     skip_index,
@@ -492,52 +498,6 @@ impl AptosDB {
             .with_label_values(&["commit_events___commit"])
             .start_timer();
         self.ledger_db.event_db().write_schemas(batch)
-    }
-
-    fn commit_transactions(
-        &self,
-        txns_to_commit: &[TransactionToCommit],
-        first_version: Version,
-        skip_index: bool,
-    ) -> Result<()> {
-        let _timer = OTHER_TIMERS_SECONDS
-            .with_label_values(&["commit_transactions"])
-            .start_timer();
-        let chunk_size = 512;
-        let batches = txns_to_commit
-            .par_chunks(chunk_size)
-            .enumerate()
-            .map(|(chunk_index, txns_in_chunk)| -> Result<SchemaBatch> {
-                let batch = SchemaBatch::new();
-                let chunk_first_version = first_version + (chunk_size * chunk_index) as u64;
-                txns_in_chunk.iter().enumerate().try_for_each(
-                    |(i, txn_to_commit)| -> Result<()> {
-                        self.transaction_store.put_transaction(
-                            chunk_first_version + i as u64,
-                            txn_to_commit.transaction(),
-                            skip_index,
-                            &batch,
-                        )?;
-
-                        Ok(())
-                    },
-                )?;
-                Ok(batch)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        // Commit batches one by one for now because committing them in parallel will cause gaps. Although
-        // it might be acceptable because we are writing the progress, we want to play on the safer
-        // side unless this really becomes the bottleneck on production.
-        {
-            let _timer = OTHER_TIMERS_SECONDS
-                .with_label_values(&["commit_transactions___commit"])
-                .start_timer();
-
-            batches
-                .into_iter()
-                .try_for_each(|batch| self.ledger_db.transaction_db().write_schemas(batch))
-        }
     }
 
     fn commit_transaction_accumulator(

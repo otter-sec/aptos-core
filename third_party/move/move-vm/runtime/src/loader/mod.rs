@@ -833,7 +833,10 @@ impl Loader {
         allow_loading_failure: bool,
     ) -> VMResult<CompiledModule> {
         // bytes fetching, allow loading to fail if the flag is set
-        let bytes = match data_store.load_module(id) {
+        let bytes = match data_store
+            .load_module(id)
+            .map_err(|e| e.finish(Location::Undefined))
+        {
             Ok(bytes) => bytes,
             Err(err) if allow_loading_failure => return Err(err),
             Err(err) => {
@@ -1631,7 +1634,7 @@ impl Loader {
             .write()
             .structs
             .entry(name.clone())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(ty_args.to_vec())
             .or_insert_with(StructInfoCache::new)
             .struct_tag = Some((struct_tag.clone(), gas_context.cost - cur_cost));
@@ -1759,7 +1762,7 @@ impl Loader {
         let info = cache
             .structs
             .entry(name.clone())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(ty_args.to_vec())
             .or_insert_with(StructInfoCache::new);
         info.struct_layout_info = Some(StructLayoutInfoCacheItem {
@@ -1938,7 +1941,7 @@ impl Loader {
         let info = cache
             .structs
             .entry(name.clone())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(ty_args.to_vec())
             .or_insert_with(StructInfoCache::new);
         info.annotated_struct_layout = Some(struct_layout.clone());

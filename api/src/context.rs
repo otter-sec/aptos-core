@@ -20,7 +20,6 @@ use aptos_crypto::HashValue;
 use aptos_gas_schedule::{AptosGasParameters, FromOnChainGasSchedule};
 use aptos_logger::{error, warn};
 use aptos_mempool::{MempoolClientRequest, MempoolClientSender, SubmissionStatus};
-use aptos_state_view::TStateView;
 use aptos_storage_interface::{
     state_view::{DbStateView, DbStateViewAtVersion, LatestDbStateCheckpointView},
     DbReader, Order, MAX_REQUEST_LIMIT,
@@ -39,16 +38,16 @@ use aptos_types::{
         state_key::{StateKey, StateKeyInner},
         state_key_prefix::StateKeyPrefix,
         state_value::StateValue,
+        TStateView,
     },
     transaction::{SignedTransaction, TransactionWithProof, Version},
 };
 use aptos_utils::aptos_try;
-use aptos_vm::data_cache::AsMoveResolver;
+use aptos_vm::{data_cache::AsMoveResolver, move_vm_ext::AptosMoveResolver};
 use futures::{channel::oneshot, SinkExt};
 use move_core_types::{
     language_storage::{ModuleId, StructTag},
     move_resource::MoveResource,
-    resolver::ModuleResolver,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -413,7 +412,7 @@ impl Context {
             .into_iter()
             .map(|(key, value)| {
                 let is_resource_group =
-                    |resolver: &dyn ModuleResolver, struct_tag: &StructTag| -> bool {
+                    |resolver: &dyn AptosMoveResolver, struct_tag: &StructTag| -> bool {
                         aptos_try!({
                             let md = aptos_framework::get_metadata(
                                 &resolver.get_module_metadata(&struct_tag.module_id()),

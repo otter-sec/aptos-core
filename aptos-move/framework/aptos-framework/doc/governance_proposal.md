@@ -122,7 +122,7 @@ Useful for AptosGovernance to create an empty proposal as proof.
 
 <table>
 <tr>
-<th>No.</th><th>Property</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
+<th>No.</th><th>Requirement</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
 </tr>
 
 <tr>
@@ -152,7 +152,7 @@ Useful for AptosGovernance to create an empty proposal as proof.
 
 
 <pre><code><b>aborts_if</b> <b>false</b>;
-// This enforces <a id="high-level-req-1.1" href="#high-level-req">high level requirement 1</a>:
+// This enforces <a id="high-level-req-1.1" href="#high-level-req">high-level requirement 1</a>:
 <b>ensures</b> result == <a href="governance_proposal.md#0x1_governance_proposal_GovernanceProposal">GovernanceProposal</a> {};
 </code></pre>
 
@@ -170,7 +170,7 @@ Useful for AptosGovernance to create an empty proposal as proof.
 
 
 <pre><code><b>aborts_if</b> <b>false</b>;
-// This enforces <a id="high-level-req-1.2" href="#high-level-req">high level requirement 1</a>:
+// This enforces <a id="high-level-req-1.2" href="#high-level-req">high-level requirement 1</a>:
 <b>ensures</b> result == <a href="governance_proposal.md#0x1_governance_proposal_GovernanceProposal">GovernanceProposal</a> {};
 </code></pre>
 
