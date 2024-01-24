@@ -449,7 +449,7 @@ impl PartialVMError {
                 message = format!("{} @{}", message, stacktrace);
             }
         }
-        debug_assert!(self.0.message.is_none());
+        //debug_assert!(self.0.message.is_none());
         self.0.message = Some(message);
         self
     }

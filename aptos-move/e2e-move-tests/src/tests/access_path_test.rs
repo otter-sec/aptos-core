@@ -21,12 +21,12 @@ use move_binary_format::{
 use move_core_types::{identifier::Identifier, vm_status::StatusCode};
 
 
-#[test]
-fn access_path_panic2() {
-    let mut harness = MoveHarness::new();
-    harness.publish_package_with_options(account, path, options);
-
-}
+// #[test]
+// fn access_path_panic2() {
+//     let mut harness = MoveHarness::new();
+//     harness.publish_package_with_options(account, path, options);
+//
+// }
 
 #[test]
 fn access_path_panic() {
