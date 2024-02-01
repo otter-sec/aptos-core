@@ -3,7 +3,7 @@
 
 use crate::{
     captured_reads::CapturedReads,
-    errors::{Error, IntentionalFallbackToSequential},
+    errors::{BlockExecutionError, IntentionalFallbackToSequential},
     explicit_sync_wrapper::ExplicitSyncWrapper,
     task::{ExecutionStatus, TransactionOutput},
     types::{InputOutputKey, ReadWriteSummary},
@@ -34,7 +34,7 @@ type TxnInput<T> = CapturedReads<T>;
 // the WriteOps corresponding to the deltas in the corresponding outputs.
 #[derive(Debug)]
 pub(crate) struct TxnOutput<O: TransactionOutput, E: Debug> {
-    output_status: ExecutionStatus<O, Error<E>>,
+    output_status: ExecutionStatus<O, BlockExecutionError<E>>,
 }
 
 pub(crate) enum KeyKind {
@@ -44,11 +44,11 @@ pub(crate) enum KeyKind {
 }
 
 impl<O: TransactionOutput, E: Debug> TxnOutput<O, E> {
-    pub fn from_output_status(output_status: ExecutionStatus<O, Error<E>>) -> Self {
+    pub fn from_output_status(output_status: ExecutionStatus<O, BlockExecutionError<E>>) -> Self {
         Self { output_status }
     }
 
-    pub fn output_status(&self) -> &ExecutionStatus<O, Error<E>> {
+    pub fn output_status(&self) -> &ExecutionStatus<O, BlockExecutionError<E>> {
         &self.output_status
     }
 }
@@ -126,7 +126,7 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
         &self,
         txn_idx: TxnIndex,
         input: CapturedReads<T>,
-        output: ExecutionStatus<O, Error<E>>,
+        output: ExecutionStatus<O, BlockExecutionError<E>>,
     ) -> bool {
         let written_modules = match &output {
             ExecutionStatus::Success(output) | ExecutionStatus::SkipRest(output) => {
@@ -138,27 +138,36 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
             | ExecutionStatus::DelayedFieldsCodeInvariantError(_) => BTreeMap::new(),
         };
 
-        if !self.module_read_write_intersection.load(Ordering::Relaxed) {
-            // Check if adding new read & write modules leads to intersections.
-            if Self::append_and_check(
-                input.module_reads.iter(),
-                &self.module_reads,
-                &self.module_writes,
-            ) || Self::append_and_check(
-                written_modules.keys(),
-                &self.module_writes,
-                &self.module_reads,
-            ) {
-                self.module_read_write_intersection
-                    .store(true, Ordering::Release);
-                return false;
-            }
+        if self
+            .check_and_append_module_rw_conflict(input.module_reads.iter(), written_modules.keys())
+        {
+            return false;
         }
 
         self.inputs[txn_idx as usize].store(Some(Arc::new(input)));
         self.outputs[txn_idx as usize].store(Some(Arc::new(TxnOutput::from_output_status(output))));
 
         true
+    }
+
+    pub(crate) fn check_and_append_module_rw_conflict<'a>(
+        &self,
+        module_reads_keys: impl Iterator<Item = &'a T::Key>,
+        module_writes_keys: impl Iterator<Item = &'a T::Key>,
+    ) -> bool {
+        if self.module_read_write_intersection.load(Ordering::Relaxed) {
+            return true;
+        }
+
+        // Check if adding new read & write modules leads to intersections.
+        if Self::append_and_check(module_reads_keys, &self.module_reads, &self.module_writes)
+            || Self::append_and_check(module_writes_keys, &self.module_writes, &self.module_reads)
+        {
+            self.module_read_write_intersection
+                .store(true, Ordering::Release);
+            return true;
+        }
+        false
     }
 
     pub(crate) fn read_set(&self, txn_idx: TxnIndex) -> Option<Arc<CapturedReads<T>>> {
@@ -203,21 +212,31 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
         )
     }
 
-    pub(crate) fn maybe_execution_error(&self, txn_idx: TxnIndex) -> Option<Error<E>> {
+    pub(crate) fn module_rw_intersection_ok(
+        &self,
+    ) -> Result<(), PanicOr<IntentionalFallbackToSequential>> {
         if self.module_read_write_intersection.load(Ordering::Acquire) {
-            return Some(Error::FallbackToSequential(PanicOr::Or(
+            Err(PanicOr::Or(
                 IntentionalFallbackToSequential::ModulePathReadWrite,
-            )));
+            ))
+        } else {
+            Ok(())
         }
+    }
 
+    pub(crate) fn aborted_execution_status(
+        &self,
+        txn_idx: TxnIndex,
+    ) -> Option<BlockExecutionError<E>> {
         if let ExecutionStatus::Abort(err) = &self.outputs[txn_idx as usize]
             .load_full()
             .expect("[BlockSTM]: Execution output must be recorded after execution")
             .output_status
         {
-            return Some(err.clone());
+            Some(err.clone())
+        } else {
+            None
         }
-        None
     }
 
     pub(crate) fn update_to_skip_rest(&self, txn_idx: TxnIndex) {
@@ -461,7 +480,10 @@ impl<T: Transaction, O: TransactionOutput<Txn = T>, E: Debug + Send + Clone>
 
     // Must be executed after parallel execution is done, grabs outputs. Will panic if
     // other outstanding references to the recorded outputs exist.
-    pub(crate) fn take_output(&self, txn_idx: TxnIndex) -> ExecutionStatus<O, Error<E>> {
+    pub(crate) fn take_output(
+        &self,
+        txn_idx: TxnIndex,
+    ) -> ExecutionStatus<O, BlockExecutionError<E>> {
         let owning_ptr = self.outputs[txn_idx as usize]
             .swap(None)
             .expect("[BlockSTM]: Output must be recorded after execution");

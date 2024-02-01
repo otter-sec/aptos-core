@@ -6,6 +6,8 @@ use crate::pipeline::{
     avail_copies_analysis::AvailCopiesAnalysisProcessor,
     livevar_analysis_processor::LiveVarAnalysisProcessor,
     reference_safety_processor::ReferenceSafetyProcessor,
+    uninitialized_use_checker::UninitializedUseChecker,
+    unreachable_code_analysis::UnreachableCodeProcessor,
 };
 use move_stackless_bytecode::function_target::FunctionTarget;
 
@@ -16,6 +18,9 @@ pub mod dead_store_elimination;
 pub mod explicit_drop;
 pub mod livevar_analysis_processor;
 pub mod reference_safety_processor;
+pub mod uninitialized_use_checker;
+pub mod unreachable_code_analysis;
+pub mod unreachable_code_remover;
 pub mod visibility_checker;
 
 /// Function to register all annotation formatters in the pipeline. Those are used
@@ -25,4 +30,6 @@ pub fn register_formatters(target: &FunctionTarget) {
     LiveVarAnalysisProcessor::register_formatters(target);
     ReferenceSafetyProcessor::register_formatters(target);
     AvailCopiesAnalysisProcessor::register_formatters(target);
+    UninitializedUseChecker::register_formatters(target);
+    UnreachableCodeProcessor::register_formatters(target);
 }
